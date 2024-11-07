@@ -1,0 +1,3 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+56665,674200312141020,KABR,31,KMSP,35,0
+79601,684200208302047,KMSP,30R,KABR,31,0

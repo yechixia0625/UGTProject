@@ -1,0 +1,3 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+989,652200203211129,KMSP,30R,KXNA,34,0
+94296,671200108091039,KXNA,16,KMSP,30L,1

@@ -1,0 +1,3 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+37184,668200105290610,KOKC,18,KOKC,17L,0
+49932,672200209171752,KOKC,17R,KOKC,17R,0

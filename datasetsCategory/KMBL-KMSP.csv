@@ -1,0 +1,3 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+37005,667201003240506,KMBL,27,KMSP,12L,0
+99142,665200201270509,KMBL,27,KMSP,30R,3

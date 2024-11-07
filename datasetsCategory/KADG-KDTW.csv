@@ -1,0 +1,4 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+65207,677200401281308,KADG,23,KDTW,4L,0
+68057,680200106121021,KADG,11,KDTW,4L,0
+74464,682200301061745,KADG,5,KDTW,22R,0

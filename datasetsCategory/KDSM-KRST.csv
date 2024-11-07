@@ -1,0 +1,3 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+5826,654200208200706,KRST,31,KDSM,31,0
+44520,670200303100512,KDSM,23,KRST,20,0

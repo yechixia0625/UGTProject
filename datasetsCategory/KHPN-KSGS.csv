@@ -1,0 +1,4 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+9277,656200108101228,KSGS,NAN,KHPN,29,0
+9292,656200108191828,KSGS,16,KHPN,16,0
+9334,656200109041814,KSGS,NAN,KHPN,16,0
