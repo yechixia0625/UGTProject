@@ -24,8 +24,18 @@ for airport in arrival_airports:
     # 获取该机场对应的数据数量
     count = len(airport_data)
     
-    # 记录机场和对应的数量
-    airport_data_counts.append({'arrival_airport': airport, 'data_count': count})
+    # 计算各个label的数量
+    label_counts = airport_data['label'].value_counts().reindex([0, 1, 2, 3], fill_value=0)
+    
+    # 记录机场和对应的数量以及各label的数量
+    airport_data_counts.append({
+        'arrival_airport': airport,
+        'data_count': count,
+        'label_0_count': label_counts[0],
+        'label_1_count': label_counts[1],
+        'label_2_count': label_counts[2],
+        'label_3_count': label_counts[3]
+    })
     
     # 生成文件名，并在前面加上保存目录路径
     filename = os.path.join(save_directory, f"{airport}.csv")
@@ -40,4 +50,8 @@ counts_df = pd.DataFrame(airport_data_counts)
 counts_filename = os.path.join(save_directory, "airport_data_counts.csv")
 counts_df.to_csv(counts_filename, index=False)
 
-print("数据提取和保存完成，包括机场数据数量信息！")
+# 将airport_data_counts.csv文件保存为Excel文件
+excel_filename = os.path.join(save_directory, "airport_data_counts.xlsx")
+counts_df.to_excel(excel_filename, index=False)
+
+print("数据提取和保存完成，包括airport_data_counts.csv和airport_data_counts.xlsx！")
