@@ -5,23 +5,39 @@ import os
 df = pd.read_csv('DASHlink_full_fourclass_raw_meta.csv')
 
 # 指定保存目录
-save_directory = 'datasetsCategory'
+save_directory = 'datasetsByArrivalAirport'
 
 # 如果保存目录不存在，则创建
 if not os.path.exists(save_directory):
     os.makedirs(save_directory)
 
-# 获取所有唯一的往返机场对
-airport_pairs = set([(row['departure_airport'], row['arrival_airport']) if row['departure_airport'] < row['arrival_airport'] else (row['arrival_airport'], row['departure_airport']) for index, row in df.iterrows()])
+# 获取所有唯一的到达机场
+arrival_airports = df['arrival_airport'].unique()
 
-for pair in airport_pairs:
-    # 提取出往返机场对的数据
-    pair_data = df[((df['departure_airport'] == pair[0]) & (df['arrival_airport'] == pair[1])) | ((df['departure_airport'] == pair[1]) & (df['arrival_airport'] == pair[0]))]
+# 用于记录每个机场对应的数据数量
+airport_data_counts = []
+
+for airport in arrival_airports:
+    # 提取该到达机场的所有数据
+    airport_data = df[df['arrival_airport'] == airport]
+    
+    # 获取该机场对应的数据数量
+    count = len(airport_data)
+    
+    # 记录机场和对应的数量
+    airport_data_counts.append({'arrival_airport': airport, 'data_count': count})
     
     # 生成文件名，并在前面加上保存目录路径
-    filename = os.path.join(save_directory, f"{pair[0]}-{pair[1]}.csv")
+    filename = os.path.join(save_directory, f"{airport}.csv")
     
     # 保存数据到新的CSV文件
-    pair_data.to_csv(filename, index=False)
+    airport_data.to_csv(filename, index=False)
 
-print("数据提取和保存完成！")
+# 创建一个DataFrame来保存机场数据数量信息
+counts_df = pd.DataFrame(airport_data_counts)
+
+# 生成包含所有机场的数据数量的CSV文件
+counts_filename = os.path.join(save_directory, "airport_data_counts.csv")
+counts_df.to_csv(counts_filename, index=False)
+
+print("数据提取和保存完成，包括机场数据数量信息！")

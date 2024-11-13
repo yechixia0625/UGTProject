@@ -1,4 +1,0 @@
-data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
-38438,668200208231717,KCLE,24R,KPHL,9R,0
-89879,653200303111537,KPHL,27L,KCLE,24L,1
-99643,682200211151008,KCLE,NAN,KPHL,17,3

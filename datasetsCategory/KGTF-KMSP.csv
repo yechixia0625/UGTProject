@@ -1,5 +1,0 @@
-data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
-53615,673200403291339,KGTF,16,KMSP,35,0
-81267,684200405231710,KMSP,30L,KGTF,16,0
-81268,684200405251630,KGTF,34,KMSP,12L,0
-83848,685200404110631,KGTF,34,KMSP,12R,0

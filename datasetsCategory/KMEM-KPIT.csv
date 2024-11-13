@@ -1,5 +1,0 @@
-data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
-30854,665200311220958,KPIT,28R,KMEM,36C,0
-62543,676200312060953,KPIT,28R,KMEM,NAN,0
-70172,680200312270957,KPIT,28C,KMEM,27,0
-83520,685200311290954,KPIT,28R,KMEM,36R,0
