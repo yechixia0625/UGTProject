@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 # 文件路径
-excel_file = 'client/DataNec.xlsx'  # 这里替换为你的Excel文件路径
+excel_file = 'client/Airport_Label.xlsx'  # 这里替换为你的Excel文件路径
 dataset_folder = 'datasetsByArrivalAirport'  # 存放机场数据的文件夹
 output_folder = 'data_instance_output'  # 输出数据的文件夹
 
@@ -44,7 +44,14 @@ for index, row in excel_df.iterrows():
     
     # 将数据按Label保存到输出DataFrame中
     output_df = pd.DataFrame(label_data)
-    
+
+    # 检查每列是否包含NaN值，如果包含则填充，然后转换为整数
+    for column in output_df.columns:
+        if output_df[column].isnull().any():
+            print(f"警告：列 {column} 包含 NaN 值，将用 -1 填充。")
+            output_df[column] = output_df[column].fillna(-1)  # 使用-1填充NaN值
+        output_df[column] = output_df[column].astype(int)  # 转换为整数
+
     # 保存为新的CSV文件
     output_file = os.path.join(output_folder, f"{airport}.csv")
     output_df.to_csv(output_file, index=False)

@@ -9,6 +9,6 @@ print(data.files)
 for array_name in data.files:
     print(f"{array_name} shape: {data[array_name].shape}")
 
-index = 99836
+index = 5,
 print("Data:", data['data'][index])
 print("Label:", data['label'][index])
