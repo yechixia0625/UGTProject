@@ -29,4 +29,4 @@ for client in clients:
 
         # 保存最大值和最小值到CSV文件
         max_min_values = pd.DataFrame({'Max': max_values, 'Min': min_values})
-        max_min_values.to_csv(os.path.join(label_path, f'max_min_values_label_.csv'), index_label='Column')
+        max_min_values.to_csv(os.path.join(label_path, f'max_min_values_label.csv'), index_label='Column')

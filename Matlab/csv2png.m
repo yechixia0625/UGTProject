@@ -29,7 +29,7 @@ function processFolder(folderPath)
 
             % 获取当前标签文件夹路径
             labelFolderPath = fullfile(labelFolders(j).folder, labelFolders(j).name);
-            maxMinFile = fullfile(labelFolderPath, 'max_min_values_label_.csv'); % 最大最小值文件路径
+            maxMinFile = fullfile(labelFolderPath, 'max_min_values_label.csv'); % 最大最小值文件路径
 
             % 读取最大最小值数据5
             maxMinData = readtable(maxMinFile);
@@ -41,7 +41,7 @@ function processFolder(folderPath)
 
             % 遍历当前标签文件夹下的所有CSV文件
             for i = 1:length(csvFiles)
-                if strcmp(csvFiles(i).name, 'max_min_values_label_.csv')
+                if strcmp(csvFiles(i).name, 'max_min_values_label.csv')
                     continue; % 跳过最大最小值文件本身
                 end
 
