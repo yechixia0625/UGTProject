@@ -1,5 +1,5 @@
 % 指定顶级文件夹路径
-folderPath = '/Users/yechixia/UGTProject/Matlab/Dataset_IID2/';
+folderPath = 'Dataset_IID';
 
 % 调用函数处理顶级文件夹
 processFolder(folderPath);
@@ -31,7 +31,7 @@ function processFolder(folderPath)
             labelFolderPath = fullfile(labelFolders(j).folder, labelFolders(j).name);
             maxMinFile = fullfile(labelFolderPath, 'max_min_values_label.csv'); % 最大最小值文件路径
 
-            % 读取最大最小值数据5
+            % 读取最大最小值数据
             maxMinData = readtable(maxMinFile);
             maxValues = maxMinData.Max;
             minValues = maxMinData.Min;

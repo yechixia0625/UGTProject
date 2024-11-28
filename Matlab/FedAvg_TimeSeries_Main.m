@@ -1,8 +1,9 @@
 clc;
 clear;
+close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_IID2'); 
+DatasetPath = fullfile('Dataset_IID'); 
 %% Define Parallel
 cluster = parcluster("Processes");
 cluster.NumWorkers = 6;
@@ -155,95 +156,3 @@ while Round < CommunicationRounds && ~Monitor.Stop
     Monitor.Progress = 100 * Round / CommunicationRounds;
 end
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-%% 训练结束后，提取特征并使用 t-SNE 可视化
-
-% 定义要提取特征的层
-featureLayer = 'fc2';
-
-% 初始化存储所有客户端特征和标签的数组
-allFeatures = [];
-allLabels = [];
-allClients = [];
-
-% 更新类名为 '0', '1', '2', '3'
-classes = {'0', '1', '2', '3'};
-
-% 遍历每个参与者（客户端）
-for clientNum = 1:6  % 客户端数量为6
-    % 获取每个客户端的本地数据集路径
-    clientDatasetPath = fullfile('Dataset_IID2', ['local_', num2str(clientNum)]);
-    
-    % 为客户端创建图像数据存储
-    locSet = imageDatastore(clientDatasetPath, 'IncludeSubfolders', true, 'LabelSource', 'foldernames');
-    
-    % 将数据拆分为训练集，丢弃其余部分
-    [locTrain, ~] = splitEachLabel(locSet, 0.8, "randomized");
-    % 进一步拆分，只保留训练数据
-    [locTrain, ~] = splitEachLabel(locTrain, 0.875, "randomized");
-    
-    % 创建增强的图像数据存储
-    locTrain = augmentedImageDatastore(inputSize(1:2), locTrain);
-    
-    % 定义预处理函数
-    preprocess = @(X,Y)MiniBatchPreprocessing(X,Y,classes); 
-    
-    % 为训练数据创建小批量队列
-    locTrainMBQ = minibatchqueue(locTrain, ...
-        MiniBatchSize = MiniBatchSize, ...
-        MiniBatchFcn = preprocess, ...
-        MiniBatchFormat = ["SSCB",""]);
-    
-    % 初始化存储该客户端特征和标签的数组
-    clientFeatures = [];
-    clientLabels = [];
-    
-    % 重置小批量队列
-    reset(locTrainMBQ);
-    
-    % 遍历小批量数据
-    while hasdata(locTrainMBQ)
-        [X, Y] = next(locTrainMBQ);
-        
-        % 将数据通过网络，获取指定层的特征
-        features = forward(globalModel, X, 'Outputs', featureLayer);
-        
-        % 提取特征
-        features = features{1};
-        
-        % 将特征转换为数值数组并转置
-        features = gather(extractdata(features))';
-        
-        % 将 one-hot 编码的标签解码为分类
-        labels = onehotdecode(Y, classes, 1);
-        
-        % 收集该客户端的特征和标签
-        clientFeatures = [clientFeatures; features];
-        clientLabels = [clientLabels; labels];
-    end
-    
-    % 将客户端的特征和标签添加到总体数组中
-    allFeatures = [allFeatures; clientFeatures];
-    allLabels = [allLabels; clientLabels];
-    allClients = [allClients; clientNum * ones(size(clientLabels))];
-end
-
-% 使用 t-SNE 进行降维
-rng('default') % 保持结果可重复
-Y = tsne(allFeatures);
-
-% 绘制 t-SNE 结果，按客户端进行颜色区分
-figure;
-gscatter(Y(:,1), Y(:,2), allClients);
-title('客户端数据表示的 t-SNE 可视化');
-xlabel('t-SNE 维度 1');
-ylabel('t-SNE 维度 2');
-legend('客户端 1', '客户端 2', '客户端 3', '客户端 4', '客户端 5', '客户端 6');
-
-% 或者，按标签进行颜色区分
-figure;
-gscatter(Y(:,1), Y(:,2), allLabels);
-title('数据标签的 t-SNE 可视化');
-xlabel('t-SNE 维度 1');
-ylabel('t-SNE 维度 2');
-legend(classes);
-

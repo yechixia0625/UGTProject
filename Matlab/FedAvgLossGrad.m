@@ -1,5 +1,5 @@
 %% Loss and Gradient Calculation
-function [loss, gradient] = FedAvgLossAndGrad(localModel, X, Y)
+function [loss, gradient] = FedAvgLossGrad(localModel, X, Y)
 
     YPred = forward(localModel, X);
     loss = crossentropy(YPred, Y);
