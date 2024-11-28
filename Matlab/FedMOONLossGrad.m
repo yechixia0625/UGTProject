@@ -1,4 +1,4 @@
-function [CurLocalRepresent,gradient] = MOONLossGrad(localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu)
+function [CurLocalRepresent,gradient] = FedMOONLossGrad(localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu)
 
 % supervised loss
 YPred = forward(localModel, X);
@@ -14,7 +14,11 @@ CurGloRepresent = gather(CurGloRepresent);
 CurGloRepresent = extractdata(CurGloRepresent);
 
 sim1 = dot(CurLocalRepresent, CurGloRepresent) / (norm(CurLocalRepresent) * norm(CurGloRepresent)); 
-sim2 = dot(CurLocalRepresent, PreLocRepresent) / (norm(CurLocalRepresent) * norm(PreLocRepresent)); 
+if isempty(PreLocRepresent)
+    sim2 = 0;
+else
+    sim2 = dot(CurLocalRepresent, PreLocRepresent) / (norm(CurLocalRepresent) * norm(PreLocRepresent)); 
+end
 
 ConLoss = -log(exp(sim1/Temperature)/(exp(sim1/Temperature)+exp(sim2/Temperature)));
 

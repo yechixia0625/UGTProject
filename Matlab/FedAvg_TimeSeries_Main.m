@@ -102,10 +102,13 @@ layers = [
 globalModel = dlnetwork(layers);
 %% Define Global Constants
 CommunicationRounds = 100; 
-LocalEpochs = 30; 
+LocalEpochs = 10; 
 LearningRate = 0.001;
 Momentum = 0.5;
 Velocity = []; 
+Temperature = 0.5; % 定义温度参数
+Mu = 1.0; % 定义对比损失的权重
+
 
 % server published a global model to all participants
 localModel = globalModel;
@@ -116,7 +119,10 @@ Monitor = trainingProgressMonitor(...
     XLabel="Communication Round");
 %% Training Circuit
 Round = 0;
-PreLocRepresent = [];
+
+spmd
+    PreLocRepresent = []; % 初始化PreLocRepresent
+end
 
 %  record the accuracy of each class for global test
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
@@ -138,9 +144,10 @@ while Round < CommunicationRounds && ~Monitor.Stop
                 % X: image, Y: label
                 [X, Y] = next(locTrainMBQ); 
                 % loss and gradient calculation
-                [loss, gradient] = dlfeval(@FedAvgLossGrad,localModel, X, Y); 
+                [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
                 % stochastic gradient descent update
                 [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
+                PreLocRepresent = CurLocalRepresent;
             end
         end
         % local model parameter collection
@@ -172,100 +179,3 @@ while Round < CommunicationRounds && ~Monitor.Stop
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-
-% %% 训练结束后，提取特征并使用 t-SNE 可视化
-
-% % 定义要提取特征的层
-% featureLayer = 'fc2';
-
-% % 初始化存储所有客户端特征和标签的数组
-% allFeatures = [];
-% allLabels = [];
-% allClients = [];
-
-% % 更新类名为 '0', '1', '2', '3'
-% classes = {'0', '1', '2', '3'};
-
-% % 遍历每个参与者（客户端）
-% for clientNum = 1:6  % 客户端数量为6
-%     % 获取每个客户端的本地数据集路径
-%     clientDatasetPath = fullfile('Dataset_IID', ['local_', num2str(clientNum)]);
-    
-%     % 为客户端创建图像数据存储
-%     locSet = imageDatastore(clientDatasetPath, 'IncludeSubfolders', true, 'LabelSource', 'foldernames');
-    
-%     % 将数据拆分为训练集，丢弃其余部分
-%     [locTrain, ~] = splitEachLabel(locSet, 0.8, "randomized");
-%     % 进一步拆分，只保留训练数据
-%     [locTrain, ~] = splitEachLabel(locTrain, 0.875, "randomized");
-    
-%     % 创建增强的图像数据存储
-%     locTrain = augmentedImageDatastore(inputSize(1:2), locTrain);
-    
-%     % 定义预处理函数
-%     preprocess = @(X,Y)MiniBatchPreprocessing(X,Y,classes); 
-    
-%     % 为训练数据创建小批量队列
-%     locTrainMBQ = minibatchqueue(locTrain, ...
-%         MiniBatchSize = MiniBatchSize, ...
-%         MiniBatchFcn = preprocess, ...
-%         MiniBatchFormat = ["SSCB",""]);
-    
-%     % 初始化存储该客户端特征和标签的数组
-%     clientFeatures = [];
-%     clientLabels = [];
-    
-%     % 重置小批量队列
-%     reset(locTrainMBQ);
-    
-%     % 遍历小批量数据
-%     while hasdata(locTrainMBQ)
-%         [X, Y] = next(locTrainMBQ);
-        
-%         % 将数据通过网络，获取指定层的特征
-%         features = forward(globalModel, X, 'Outputs', featureLayer);
-        
-%         % 提取特征
-%         features = features{1};
-        
-%         % 将特征转换为数值数组并转置
-%         features = gather(extractdata(features))';
-        
-%         % 将 one-hot 编码的标签解码为分类
-%         labels = onehotdecode(Y, classes, 1);
-        
-%         % 收集该客户端的特征和标签
-%         clientFeatures = [clientFeatures; features];
-%         clientLabels = [clientLabels; labels];
-%     end
-    
-%     % 将客户端的特征和标签添加到总体数组中
-%     allFeatures = [allFeatures; clientFeatures];
-%     allLabels = [allLabels; clientLabels];
-%     allClients = [allClients; clientNum * ones(size(clientLabels))];
-% end
-
-% % 使用 t-SNE 进行降维
-% rng('default') % 保持结果可重复
-% Y = tsne(allFeatures);
-% % Draw t-SNE results, color-coded by client
-% figure;
-% gscatter(Y(:,1), Y(:,2), allClients);
-% title('t-SNE visualization of client data representation');
-% xlabel('t-SNE dimension 1');
-% ylabel('t-SNE dimension 2');
-% Legend ('Client 1 ', 'Client 2', 'Client 3', 'Client 4', 'Client 5', 'Client 6');
-% clientTsneFilename = fullfile(pwd, 'ClientData_tsne.png');
-% saveas(gcf, clientTsneFilename);
-% close(gcf);  % Close the figure after saving
-
-% % Or, color by label
-% figure;
-% gscatter(Y(:,1), Y(:,2), allLabels);
-% title('t-SNE visualization of data label');
-% xlabel('t-SNE dimension 1');
-% ylabel('t-SNE dimension 2');
-% legend(classes);
-% labelTsneFilename = fullfile(pwd, 'LabelData_tsne.png');
-% saveas(gcf, labelTsneFilename);
-% close(gcf);  % Close the figure after saving
