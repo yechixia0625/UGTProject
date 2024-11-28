@@ -12,5 +12,5 @@ def delete_max_min_files(folder_path):
                 print(f"Deleted: {file_path}")
 
 # 指定顶级目录路径
-top_folder = '/Users/yechixia/UGTProject/Matlab/Dataset_IID2'
+top_folder = '/users/coa22cy/UGTProject/Dataset_IID'
 delete_max_min_files(top_folder)
