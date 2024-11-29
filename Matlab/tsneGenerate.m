@@ -14,6 +14,8 @@ all_features = [];
 all_labels = [];
 all_clients = [];
 
+noise_client_index = 1;
+
 % Iterate over each client
 for c = 1:length(clients)
     client = clients{c};
@@ -28,12 +30,12 @@ for c = 1:length(clients)
         label = labels{l};
         label_path = fullfile(client_path, label);
         
-        % Get all CSV files in the current label directory
-        csv_files = dir(fullfile(label_path, '*.csv'));
+        features = [];
+        labels_client = [];
 
         % Process each CSV file
         for f = 1:length(csv_files)
-            file_name = csv_files(f).name;
+            label = labels{f};
             file_path = fullfile(label_path, file_name);
 
             % Read data from the CSV file
@@ -45,10 +47,18 @@ for c = 1:length(clients)
                 warning('File %s has dimensions other than 160x20, skipped.', file_path);
                 continue;
             end
-            
+
+            if c == noise_client_index
+                % 定义噪声强度（可以根据需要调整）
+                noise_level = 0.1;  % 噪声强度
+                % 生成与数据相同维度的随机噪声
+                noise = noise_level * randn(size(data));
+                % 将噪声添加到数据中
+                data = data + noise;
+            end
+
             % Initialize an array to store features from the current file
             sample_features = [];
-            
             % Process each column of data
             for s = 1:num_cols
                 sensor_data = data(:, s);
@@ -94,8 +104,13 @@ for c = 1:length(clients)
     all_clients = [all_clients; c * ones(size(labels_client))];
 end
 
+all_features = zscore(all_features);
+for c = 1:length(clients)
+    client_features{c} = zscore(client_features{c});
+end
+
 % Set t-SNE parameters
-perplexity = 30;
+perplexity = 50;
 
 % Create a new figure window
 figure;
