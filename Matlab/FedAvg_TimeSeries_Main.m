@@ -1,12 +1,11 @@
 clc;
 clear;
-close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_IID'); 
+DatasetPath = fullfile('C:\Users\25408\Desktop\Robotics Project and Dissertation\Dataset\TimeSeriesDataset\TimeSeriesDataset_IID'); 
 %% Define Parallel
 cluster = parcluster("Processes");
-cluster.NumWorkers = 6;
+cluster.NumWorkers = 4;
 parpool = parpool(cluster); 
 %% Define Participant
 participants = parpool.NumWorkers;
@@ -82,11 +81,6 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
-    % add new conv
-    convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    reluLayer('Name', 'relu3')
-    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
-
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
     reluLayer('Name', 'relu3')
@@ -106,9 +100,6 @@ LocalEpochs = 10;
 LearningRate = 0.001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature = 0.5; % 定义温度参数
-Mu = 1.0; % 定义对比损失的权重
-
 
 % server published a global model to all participants
 localModel = globalModel;
@@ -119,10 +110,7 @@ Monitor = trainingProgressMonitor(...
     XLabel="Communication Round");
 %% Training Circuit
 Round = 0;
-
-spmd
-    PreLocRepresent = []; % 初始化PreLocRepresent
-end
+PreLocRepresent = [];
 
 %  record the accuracy of each class for global test
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
@@ -144,10 +132,9 @@ while Round < CommunicationRounds && ~Monitor.Stop
                 % X: image, Y: label
                 [X, Y] = next(locTrainMBQ); 
                 % loss and gradient calculation
-                [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
+                [loss, gradient] = dlfeval(@FedAvgLossGrad,localModel, X, Y); 
                 % stochastic gradient descent update
                 [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
-                PreLocRepresent = CurLocalRepresent;
             end
         end
         % local model parameter collection
@@ -158,24 +145,13 @@ while Round < CommunicationRounds && ~Monitor.Stop
     globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
     %% Global Model Evaluation 
     [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
-    fprintf('Round %d: Global Test Accuracy: %.4f\n', Round, GlobalTestAccuracy);
     % record the accuracy of each class for global test
     GlobalRecording(Round, :) = GlobalClassAccuracy;
     % confusion matrix
     plotconfusion(GlobalTestLabel, GlobalTestPred)
-    % Create the directory if it doesn't exist
-    outputDir = fullfile(pwd, 'confusionMATRIX');
-    if ~exist(outputDir, 'dir')
-        mkdir(outputDir);
-    end
-    % Save the confusion matrix as an image
-    confusionFileName = fullfile(outputDir, ['ConfusionMatrix_Round_', num2str(Round), '.png']);
-    saveas(gcf, confusionFileName);
-    close(gcf); % Close the figure after saving
     % update monitor
     recordMetrics(Monitor, Round, GlobalAccuracy = GlobalTestAccuracy);
     updateInfo(Monitor, CommunicationRound = Round + " of " + CommunicationRounds);     
     Monitor.Progress = 100 * Round / CommunicationRounds;
 end
-
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
