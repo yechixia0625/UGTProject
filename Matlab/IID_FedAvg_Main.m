@@ -2,10 +2,10 @@ clc;
 clear;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('C:\Users\25408\Desktop\Robotics Project and Dissertation\Dataset\TimeSeriesDataset\TimeSeriesDataset_IID'); 
+DatasetPath = fullfile('Dataset_IID'); 
 %% Define Parallel
 cluster = parcluster("Processes");
-cluster.NumWorkers = 4;
+cluster.NumWorkers = 6;
 parpool = parpool(cluster); 
 %% Define Participant
 participants = parpool.NumWorkers;
@@ -81,6 +81,11 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
+    % add new conv
+    convolution2dLayer([5 1], 16, 'Name', 'conv3')
+    reluLayer('Name', 'relu3')
+    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
+
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
     reluLayer('Name', 'relu3')
@@ -114,6 +119,7 @@ PreLocRepresent = [];
 
 %  record the accuracy of each class for global test
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
+GlobalAccuracyRecord = zeros(1, CommunicationRounds);
 
 % stop conditions
 while Round < CommunicationRounds && ~Monitor.Stop 
@@ -145,6 +151,8 @@ while Round < CommunicationRounds && ~Monitor.Stop
     globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
     %% Global Model Evaluation 
     [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
+    % Record GlobalTestAccuracy
+    GlobalAccuracyRecord(Round) = GlobalTestAccuracy;
     % record the accuracy of each class for global test
     GlobalRecording(Round, :) = GlobalClassAccuracy;
     % confusion matrix
@@ -155,3 +163,5 @@ while Round < CommunicationRounds && ~Monitor.Stop
     Monitor.Progress = 100 * Round / CommunicationRounds;
 end
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
+save('GlobalTestAccuracyRecordforFedIID.mat', 'GlobalAccuracyRecord');
+save('GlobalClassTestAccuracyRecordforFedIID.mat', 'GlobalRecording');

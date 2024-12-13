@@ -83,9 +83,9 @@ layers = [
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
     % add new conv
-    % convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    % reluLayer('Name', 'relu3')
-    % maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
+    convolution2dLayer([5 1], 16, 'Name', 'conv3')
+    reluLayer('Name', 'relu3')
+    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
 
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
@@ -119,13 +119,13 @@ Monitor = trainingProgressMonitor(...
     XLabel="Communication Round");
 %% Training Circuit
 Round = 0;
-
 spmd
     PreLocRepresent = []; % 初始化PreLocRepresent
 end
 
 %  record the accuracy of each class for global test
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
+GlobalAccuracyRecord = zeros(1, CommunicationRounds);
 
 % stop conditions
 while Round < CommunicationRounds && ~Monitor.Stop 
@@ -159,15 +159,17 @@ while Round < CommunicationRounds && ~Monitor.Stop
     %% Global Model Evaluation 
     [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
     fprintf('Round %d: Global Test Accuracy: %.4f\n', Round, GlobalTestAccuracy);
+    % Record GlobalTestAccuracy
+    GlobalAccuracyRecord(Round) = GlobalTestAccuracy;
     % record the accuracy of each class for global test
     GlobalRecording(Round, :) = GlobalClassAccuracy;
     % confusion matrix
     plotconfusion(GlobalTestLabel, GlobalTestPred)
     % Create the directory if it doesn't exist
-    outputDir = fullfile(pwd, 'confusionMATRIX');
-    if ~exist(outputDir, 'dir')
-        mkdir(outputDir);
-    end
+    % outputDir = fullfile(pwd, 'confusionMATRIX');
+    % if ~exist(outputDir, 'dir')
+    %     mkdir(outputDir);
+    % end
     % Save the confusion matrix as an image
     % confusionFileName = fullfile(outputDir, ['ConfusionMatrix_Round_', num2str(Round), '.png']);
     % saveas(gcf, confusionFileName);
@@ -179,3 +181,5 @@ while Round < CommunicationRounds && ~Monitor.Stop
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
+save('GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
+save('GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');

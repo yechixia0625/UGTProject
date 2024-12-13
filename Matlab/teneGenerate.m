@@ -56,7 +56,7 @@ for c = 1:length(clients)
             % If the current client is the designated noise client, add random noise to the image
             if c == noise_client_index
                 % Define noise intensity (can be adjusted as needed)
-                noise_level = 0.3;  % Noise intensity
+                noise_level = 0;  % Noise intensity
                 % Generate random noise of the same dimensions as the image
                 noise = noise_level * randn(size(img));
                 % Add noise to the image
@@ -96,7 +96,7 @@ for c = 1:length(clients)
 end
 
 % Set parameters for t-SNE
-perplexity = 50;
+perplexity = 30;
 
 % Create a new figure window
 figure;
@@ -124,3 +124,16 @@ for c = 1:num_clients
     legend('Label 0', 'Label 1', 'Label 2', 'Label 3');
     grid on;
 end
+
+% Perform t-SNE on all combined features and labels
+mappedAll = tsne(all_features, 'Perplexity', perplexity);
+
+% Create a new figure for the combined t-SNE
+figure;
+gscatter(mappedAll(:,1), mappedAll(:,2), all_labels);
+title('t-SNE - Combined Clients');
+xlabel('Dimension 1');
+ylabel('Dimension 2');
+legend('Label 0', 'Label 1', 'Label 2', 'Label 3');
+grid on;
+
