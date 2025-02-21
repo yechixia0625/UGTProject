@@ -99,147 +99,174 @@ layers = [
     fullyConnectedLayer(NumClasses, 'Name', 'fc3')
     softmaxLayer('Name', 'softmax')];
   
-globalModel = dlnetwork(layers);
-%% Define Global Constants
-CommunicationRounds = 100; 
-LocalEpochs = 10; 
-LearningRate = 0.001;
-Momentum = 0.5;
-Velocity = []; 
-Temperature = 0.5;
-Mu = 1.0;
+    globalModel = dlnetwork(layers);
+    %% Define Global Constants
+    CommunicationRounds = 100; 
+    LocalEpochs = 10; 
+    LearningRate = 0.001;
+    Momentum = 0.5;
+    Velocity = []; 
+    Temperature = 0.5;
+    Mu = 1.0;
+    
+    dropout_round = 30;
+    drop_client_id = 6;
+    
 
-% server published a global model to all participants
-localModel = globalModel;
-%% Define Monitor
-Monitor = trainingProgressMonitor(...
-    Metrics = "GlobalAccuracy", ...
-    Info="CommunicationRound", ...
-    XLabel="Communication Round");
-%% Training Circuit
-Round = 0;
-spmd
-    PreLocRepresent = [];
-end
-
-%  record the accuracy of each class for global test
-GlobalRecording = zeros(CommunicationRounds, NumClasses);
-GlobalAccuracyRecord = zeros(1, CommunicationRounds);
-
-% stop conditions
-while Round < CommunicationRounds && ~Monitor.Stop 
-
-    Round = Round + 1;
-
+    localModel = globalModel;
+    %% Define Monitor
+    Monitor = trainingProgressMonitor(...
+        Metrics = "GlobalAccuracy", ...
+        Info="CommunicationRound", ...
+        XLabel="Communication Round");
+    %% Training Circuit
+    Round = 0;
     spmd
-        % Synchronize global model to local
-        localModel.Learnables.Value = globalModel.Learnables.Value; 
-        
-        % Local Epochs
-        for epoch = 1:LocalEpochs
-            shuffle(locTrainMBQ); 
-            while hasdata(locTrainMBQ) 
-                [X, Y] = next(locTrainMBQ); 
-                [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, ...
-                    localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
-                [localModel, Velocity] = sgdmupdate(localModel, gradient, ...
-                    Velocity, LearningRate, Momentum);
-                PreLocRepresent = CurLocalRepresent;
-            end
-        end
-        % Collect local model parameters after local training
-        locLearnable = localModel.Learnables.Value;
-    end
-
-    % ============ Simplex Learning ============
-
-    % Gather parameter differences for all layers
-    numClients = participants;
-    numLayers = height(globalModel.Learnables);
-    allGradients = [];  
-
-    for k = 1:numClients
-        paramDiff_k = [];
-        for row = 1:numLayers
-            globalParam = globalModel.Learnables.Value{row};
-            localParam  = locLearnable{k}{row};
-            
-            diffRow = localParam - globalParam;
-            paramDiff_k = [paramDiff_k; diffRow(:)];
-        end
-        allGradients = [allGradients, extractdata(paramDiff_k)];
-    end
-
-    % PCA dimension = numClients - 1 (for the simplex)
-    simplexDim = numClients - 1;
-    [coeff, ~, ~] = pca(allGradients');
-    topPC = coeff(:, 1:simplexDim);
-    reducedGradients = topPC' * allGradients; 
-
-    % Apply Riesz s-Energy regularization
-    s = 0.1;
-    lambda_riesz = 0.01;
-    regularizedGradients = reisz_energy_regularization(reducedGradients, s, lambda_riesz);
-
-    % Project onto simplex
-    simplexPoints = zeros(numClients, simplexDim);
-    for k = 1:numClients
-        simplexPoints(k,:) = project_to_simplex(regularizedGradients(:,k));
-    end
-
-    % Compute pairwise distances, get similarity, then sample alpha
-    distMatrix = pdist2(simplexPoints, simplexPoints);
-    simMatrix = 1 ./ (1 + distMatrix);
-    simMatrix = simMatrix ./ sum(simMatrix, 2);
-
-    alphaCount = zeros(1, numClients);
-    for k = 1:numClients
-        chosen = randsample(1:numClients, 1, true, simMatrix(k,:));
-        alphaCount(chosen) = alphaCount(chosen) + 1;
-    end
-    alpha = alphaCount / sum(alphaCount);
-
-    % Update the entire global model using alpha
-    for row = 1:numLayers
-        newParam = 0;
-        for k = 1:numClients
-            localParam = locLearnable{k}{row};
-            newParam = newParam + alpha(k) * localParam;
-        end
-        globalModel.Learnables.Value{row} = newParam;
+        PreLocRepresent = [];
     end
     
-    % ============ End of Simplex Learning aggregator ============
-
-
-    %% Global Model Evaluation 
-    [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = ...
-        EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
-
-    fprintf('Round %d: Global Test Accuracy: %.4f\n', Round, GlobalTestAccuracy);
-
-    % Record GlobalTestAccuracy
-    GlobalAccuracyRecord(Round) = GlobalTestAccuracy;
-    GlobalRecording(Round, :) = GlobalClassAccuracy;
-
-    % plot confusion matrix
-    plotconfusion(GlobalTestLabel, GlobalTestPred)
-
-    % (Optional) save confusion matrix
-    % outputDir = fullfile(pwd, 'confusionMATRIX');
-    % if ~exist(outputDir, 'dir')
-    %     mkdir(outputDir);
-    % end
-    % confusionFileName = fullfile(outputDir, ['ConfusionMatrix_Round_', num2str(Round), '.png']);
-    % saveas(gcf, confusionFileName);
-    % close(gcf);
-
-    % Update monitor
-    recordMetrics(Monitor, Round, GlobalAccuracy = GlobalTestAccuracy);
-    updateInfo(Monitor, CommunicationRound = Round + " of " + CommunicationRounds);     
-    Monitor.Progress = 100 * Round / CommunicationRounds;
-end
-
-FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-save('GlobalTestAccuracyRecordforSimplex.mat', 'GlobalAccuracyRecord');
-save('GlobalClassTestAccuracyRecordforSimplex.mat', 'GlobalRecording');
+    GlobalRecording = zeros(CommunicationRounds, NumClasses);
+    GlobalAccuracyRecord = zeros(1, CommunicationRounds);
+    
+    while Round < CommunicationRounds && ~Monitor.Stop 
+        Round = Round + 1;
+        
+        spmd
+            if (Round >= dropout_round) && (spmdIndex == drop_client_id)
+                % DropOut: Skip the local training process without calculating the gradient or updating the model
+                localModel.Learnables.Value = globalModel.Learnables.Value;
+                locLearnable = localModel.Learnables.Value;
+                if Round > 20
+                    numLayers = height(globalModel.Learnables);
+                    dummyLossGradient.Value = cell(numLayers, 1);
+                    for row = 1:numLayers
+                        zero_tensor = zeros(size(globalModel.Learnables.Value{row}), 'like', globalModel.Learnables.Value{row});
+                        dummyLossGradient.Value{row} = dlarray(zero_tensor);
+                    end
+                    locLossGradient = dummyLossGradient;
+                end
+            else
+                % Normal local training process
+                localModel.Learnables.Value = globalModel.Learnables.Value;
+                for epoch = 1:LocalEpochs
+                    shuffle(locTrainMBQ); 
+                    while hasdata(locTrainMBQ)
+                        [X, Y] = next(locTrainMBQ);
+                        [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
+                        [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
+                        PreLocRepresent = CurLocalRepresent;
+                        if Round > 20
+                            lastGradient = gradient;
+                        end
+                    end
+                end
+                locLearnable = localModel.Learnables.Value;
+                if Round > 20
+                    locLossGradient = lastGradient;
+                end
+            end
+        end
+        
+        % Select the aggregation mode based on the current round
+        if Round <= 20
+            %% The first 20 rounds used Federated Averaging
+            % Calculate the proportion of samples of each client, and set the number of samples of offline clients to 0
+            locTrainSizeCell = cell(1, participants);
+            for k = 1:participants
+                locTrainSizeCell{k} = locTrainSize{k};
+            end
+            if Round >= dropout_round
+                locTrainSizeCell{drop_client_id} = 0;
+            end
+            locFactor = [locTrainSizeCell{:}] / sum([locTrainSizeCell{:}]);
+            globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
+        else
+            %% Use the Simplex Learning for round 21 and beyond
+            numClients = participants;
+            lastFCLayerName = 'fc3';
+            numLayers = height(globalModel.Learnables);
+            allGradients = [];  
+    
+            % Collects the gradient of the last fully connected layer of each client and expands it as a vector
+            for k = 1:numClients
+                gradVector = [];
+                for row = 1:numLayers
+                    if strcmp(globalModel.Learnables.Layer(row), lastFCLayerName)
+                        gradRow = locLossGradient{k}.Value{row};
+                        gradRow = extractdata(gradRow);
+                        gradRow = double(gradRow);
+                        gradVector = [gradVector; gradRow(:)];
+                    end
+                end
+                allGradients = [allGradients, gradVector];
+            end
+    
+            % PCA reduces the dimension to numClients-1
+            simplexDim = numClients - 1;
+            [coeff, ~, ~] = pca(double(allGradients'));
+            topPC = coeff(:, 1:simplexDim);
+            reducedGradients = topPC' * allGradients; 
+    
+            % Apply Riesz s-Energy regularization
+            s = 0.5;
+            lambda_riesz = 0.01;
+            regularizedGradients = reisz_energy_regularization(reducedGradients, s, lambda_riesz);
+    
+            % Project onto simplex
+            simplexPoints = zeros(numClients, simplexDim);
+            for k = 1:numClients
+                simplexPoints(k,:) = project_to_simplex(regularizedGradients(:,k));
+            end
+    
+            % Calculate the similarity between clients and sample alpha
+            distMatrix = pdist2(simplexPoints, simplexPoints);
+            simMatrix = 1 ./ (1 + distMatrix);
+            simMatrix = simMatrix ./ sum(simMatrix, 2);
+    
+            alphaCount = zeros(1, numClients);
+            for k = 1:numClients
+                chosen = randsample(1:numClients, 1, true, simMatrix(k,:));
+                alphaCount(chosen) = alphaCount(chosen) + 1;
+            end
+            alpha = alphaCount / sum(alphaCount);
+    
+            % Update global model parameters:
+            % The weighted average based on alpha was used for the fc3 layer, and the rest of the layers were updated by normal gradient descent
+            for row = 1:numLayers
+                if strcmp(globalModel.Learnables.Layer(row), 'fc3')
+                    aggregatedGradient = 0;
+                    for k = 1:numClients
+                        clientGrad = locLossGradient{k}.Value{row};
+                        aggregatedGradient = aggregatedGradient + alpha(k) * clientGrad;
+                    end
+                    globalModel.Learnables.Value{row} = globalModel.Learnables.Value{row} - LearningRate * aggregatedGradient;
+                else
+                    aggregatedGradient = 0;
+                    for k = 1:numClients
+                        clientGrad = locLossGradient{k}.Value{row};
+                        aggregatedGradient = aggregatedGradient + clientGrad;
+                    end
+                    aggregatedGradient = aggregatedGradient / numClients;
+                    globalModel.Learnables.Value{row} = globalModel.Learnables.Value{row} - LearningRate * aggregatedGradient;
+                end
+            end
+        end
+    
+        %% Global Model Evaluation 
+        [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = ...
+            EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
+        fprintf('Round %d: Global Test Accuracy: %.4f\n', Round, GlobalTestAccuracy);
+    
+        GlobalAccuracyRecord(Round) = GlobalTestAccuracy;
+        GlobalRecording(Round, :) = GlobalClassAccuracy;
+    
+        plotconfusion(GlobalTestLabel, GlobalTestPred);
+    
+        recordMetrics(Monitor, Round, GlobalAccuracy = GlobalTestAccuracy);
+        updateInfo(Monitor, CommunicationRound = Round + " of " + CommunicationRounds);     
+        Monitor.Progress = 100 * Round / CommunicationRounds;
+    end
+    
+    FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
+    save('GlobalTestAccuracyRecordforSimplex.mat', 'GlobalAccuracyRecord');
+    save('GlobalClassTestAccuracyRecordforSimplex.mat', 'GlobalRecording');
