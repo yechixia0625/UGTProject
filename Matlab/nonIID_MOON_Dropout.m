@@ -89,11 +89,11 @@ layers = [
 
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
-    reluLayer('Name', 'relu3')
+    reluLayer('Name', 'relu4')
 
     % block 4
     fullyConnectedLayer(64, 'Name', 'fc2')
-    reluLayer('Name', 'relu3')
+    reluLayer('Name', 'relu5')
 
     % block 5
     fullyConnectedLayer(NumClasses, 'Name', 'fc3')

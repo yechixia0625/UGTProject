@@ -89,11 +89,11 @@ layers = [
 
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
-    reluLayer('Name', 'relu3')
+    reluLayer('Name', 'relu4')
 
     % block 4
     fullyConnectedLayer(64, 'Name', 'fc2')
-    reluLayer('Name', 'relu3')
+    reluLayer('Name', 'relu5')
 
     % block 5
     fullyConnectedLayer(NumClasses, 'Name', 'fc3')
@@ -181,5 +181,32 @@ while Round < CommunicationRounds && ~Monitor.Stop
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-save('GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
-save('GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');
+save('MOON_result/GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
+save('MOON_result/GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');
+
+load('MOON_result/GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
+load('MOON_result/GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');
+
+figure;
+plot(GlobalAccuracyRecord, '-o','LineWidth', 2);
+xlabel('Communication Rounds');
+ylabel('Global Test Accuracy');
+title('Global Test Accuracy over Communication Rounds');
+grid on;
+saveas(gcf, 'MOON_result/GlobalTestAccuracy.png');
+
+figure;
+numClasses = size(GlobalRecording,2);
+rounds = 1:size(GlobalRecording,1);
+hold on;
+colors = lines(numClasses);
+for c = 1:numClasses
+    plot(rounds, GlobalRecording(:,c), '-o','LineWidth', 2, 'Color', colors(c,:));
+end
+xlabel('Communication Rounds');
+ylabel('Test Accuracy per Class');
+title('Global Test Accuracy for each Class');
+legend(arrayfun(@(c) sprintf('Class %d', c), 1:numClasses, 'UniformOutput', false));
+grid on;
+hold off;
+saveas(gcf, 'MOON_result/GlobalClassTestAccuracy.png');
