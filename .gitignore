@@ -4,6 +4,6 @@ data_instance_output
 Dataset_nonIID
 datasetsByArrivalAirport
 Matlab/Dataset_IID
-Matlab/Simplex_result
+Matlab/Dataset_nonIID
 *.out
 .DS_Store

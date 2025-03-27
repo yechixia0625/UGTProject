@@ -28,10 +28,13 @@ function newAlpha = computeAlphaFromGradients(gradAll, numClients)
     samplingWeights = samplingWeights ./ sum(samplingWeights, 2);
     
     % Generate a new alpha based on the sample weight
+    numSamplesPerClient = 10;
     alpha_weights = zeros(1, numClients);
     for i = 1:numClients
-        pick_i = randsample(1:numClients, 1, true, samplingWeights(i,:));
-        alpha_weights(pick_i) = alpha_weights(pick_i) + 1;
+        for rep = 1:numSamplesPerClient
+            pick_i = randsample(1:numClients, 1, true, samplingWeights(i,:));
+            alpha_weights(pick_i) = alpha_weights(pick_i) + 1;
+        end
     end
-    newAlpha = alpha_weights / sum(alpha_weights);
+    newAlpha = alpha_weights / sum(alpha_weights);    
 end

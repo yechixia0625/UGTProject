@@ -1,4 +1,4 @@
-%% 
+%% Clear workspace
 clc;
 clearvars -except drop_client_ids;
 close all;
@@ -37,7 +37,7 @@ end
 XList = [];
 YList = [];
 
-% X: image, Y: label
+% Collect file paths and labels from each client's test set
 for i = 1:participants
     template = locTest{i};
     XList = [XList; template.Files];
@@ -45,39 +45,43 @@ for i = 1:participants
 end
 gloTest = imageDatastore(XList, 'Labels', YList);
 
-% access classes
+% Get class categories and number of classes
 classes = categories(gloTest.Labels);
 NumClasses = numel(classes);
 
-% global test set
+% Apply image augmentation (resize images) to the global test set
 gloTest = augmentedImageDatastore(inputSize(1:2), gloTest);
 
 %% Dataset Preprocessing
 MiniBatchSize = 100;
 
-% X: image, Y: label
+% Define preprocessing function
 preprocess = @(X,Y)MiniBatchPreprocessing(X,Y,classes); 
 
 spmd
+    % Record the number of observations in the local training set
     locTrainSize = locTrain.NumObservations;
     
+    % Create mini-batch queue for the local training set
     locTrainMBQ = minibatchqueue(locTrain, ...
         MiniBatchSize = MiniBatchSize, ...
         MiniBatchFcn = preprocess, ...
         MiniBatchFormat = ["SSCB",""]);
 
+    % Create mini-batch queue for the local validation set
     locValMBQ = minibatchqueue(locVal, ...
         MiniBatchSize = MiniBatchSize, ...
         MiniBatchFcn = preprocess, ...
         MiniBatchFormat = ["SSCB",""]); 
 end
 
+% Create mini-batch queue for the global test set
 gloTsetMBQ = minibatchqueue(gloTest, ...
     MiniBatchSize = MiniBatchSize, ...
     MiniBatchFcn = preprocess, ...
     MiniBatchFormat = ["SSCB",""]);  
 
-%% Define Network
+%% Define the Network
 layers = [
     imageInputLayer(inputSize, Normalization = "none")
     
@@ -119,7 +123,7 @@ globalSimplexLR = 0.001;
 
 %% Define Global Constants
 CommunicationRounds = 50; 
-simplex_start_epoch = 15;
+simplex_start_epoch = 11;
 dropout_round = 20;
 LocalEpochs = 10;
 LearningRate = 0.001;
@@ -138,7 +142,7 @@ GlobalAccuracyRecord = zeros(1, CommunicationRounds);
 AlphaHistory = zeros(CommunicationRounds, participants);
 alphaOld = ones(1, participants) / participants;
 
-%% Initializes the previous round of fc3 layers for subsequent dropout reconstruction
+%% Initialize previous round fc3 parameters for dropout compensation
 prev_global_W = W_fc3;
 prev_global_b = b_fc3;
 prev_alpha = alphaOld;
@@ -149,13 +153,22 @@ for i = 1:numClients
     prev_clientb_fc3{i} = b_fc3;
 end
 
-%% Define Monitor
+% Initialize dropout compensation weights
+dropoutCompensationDone = false;
+dropout_clientW_comp = cell(1, numClients);
+dropout_clientb_comp = cell(1, numClients);
+
+% Initialize fc3 history
+clientW_history = cell(CommunicationRounds, 1);
+clientb_history = cell(CommunicationRounds, 1);
+
+%% Define the training progress monitor
 Monitor = trainingProgressMonitor(...
     Metrics = "GlobalAccuracy", ...
     Info = "CommunicationRound", ...
     XLabel = "Communication Round");
 
-%% Initializes spmd internal variables
+%% Initialize internal variables for spmd
 Round = 0;
 spmd
     PreLocRepresent = [];
@@ -164,12 +177,15 @@ end
 %% Federated Learning
 while Round < CommunicationRounds && ~Monitor.Stop
     Round = Round + 1;
-    % For the dropout client, only the global model is synchronized
+    
+    %% Local Training Update (per client)
     spmd
         if (Round >= dropout_round) && ismember(spmdIndex, drop_client_ids)
+            % For dropout clients after the dropout round, simply sync with the global model
             localModel.Learnables.Value = globalModel.Learnables.Value;
             locLearnable = localModel.Learnables;
         else
+            % Non-dropout clients: initialize with the global model and perform local training
             localModel.Learnables.Value = globalModel.Learnables.Value;
             for epoch = 1:LocalEpochs
                 shuffle(locTrainMBQ);
@@ -184,13 +200,14 @@ while Round < CommunicationRounds && ~Monitor.Stop
         end
     end
     
-    % Collect the fc3 layer gradient of each client
+    %% Collect fc3 layer gradients from all clients
     spmd
         if ~hasdata(locTrainMBQ)
             reset(locTrainMBQ);
         end
         [X_dummy, Y_dummy] = next(locTrainMBQ);
         [dummyLoss, dummyGradients] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X_dummy, Y_dummy, PreLocRepresent, Temperature, Mu);
+        % Extract gradients for fc3 layer weights and biases
         fc3W_grad = dummyGradients.Value{strcmp(dummyGradients.Layer, 'fc3') & strcmp(dummyGradients.Parameter, 'Weights')};
         fc3B_grad = dummyGradients.Value{strcmp(dummyGradients.Layer, 'fc3') & strcmp(dummyGradients.Parameter, 'Bias')};
         gradVector = [fc3W_grad(:); fc3B_grad(:)];
@@ -198,8 +215,38 @@ while Round < CommunicationRounds && ~Monitor.Stop
     end
     gradAll = localGradientVector;
     
+    %% Compute the latest aggregation weights (alpha) using the new gradients
+    if Round < simplex_start_epoch
+        alpha = alphaOld; 
+    else
+        newAlpha_grad = computeAlphaFromGradients(gradAll, numClients);
+        if Round < dropout_round
+            % Before dropout round: use the simplex learning result directly
+            currentAlpha = newAlpha_grad;
+        else
+            % During dropout rounds: for dropout clients, mix the predicted value with newAlpha_grad
+            currentAlpha = newAlpha_grad;
+            for i = 1:numClients
+                if ismember(i, drop_client_ids)
+                    xdata = (1:(Round-1))';
+                    ydata = AlphaHistory(1:(Round-1), i);
+                    f = fit(xdata, ydata, 'poly1');
+                    predicted_value = f(Round);
+                    blending_factor = 0.3;
+                    currentAlpha(i) = blending_factor * predicted_value + (1 - blending_factor) * newAlpha_grad(i);
+                end
+            end
+        end
+        currentAlpha = currentAlpha / sum(currentAlpha);
+        alpha = currentAlpha;
+    end
+    AlphaHistory(Round, :) = alpha;
+    alphaOld = alpha;
+    fprintf('The alpha value of round %d is: %s\n', Round, num2str(alpha));
+    
+    %% Update fc3 layer parameters using the latest alpha
     if Round < dropout_round
-        % Dropout round not reached: Update fc3 layer using normal gradient polymerization
+        % Before dropout round: perform standard gradient aggregation update on fc3 layer
         allGradientsMat = [];
         for i = 1:numClients
             grad_i = extractdata(gradAll{i});
@@ -207,7 +254,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
         end
         globalGrad = zeros(size(allGradientsMat,1), 1);
         for k = 1:numClients
-            globalGrad = globalGrad + alphaOld(k) * allGradientsMat(:, k);
+            globalGrad = globalGrad + alpha(k) * allGradientsMat(:, k);
         end
         numW = numel(W_fc3);
         gradW = globalGrad(1:numW);
@@ -215,6 +262,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
         gradW = reshape(gradW, size(W_fc3));
         gradB = reshape(gradB, size(b_fc3));
         
+        % Update fc3 weights and biases
         W_fc3 = W_fc3 - globalSimplexLR * gradW;
         b_fc3 = b_fc3 - globalSimplexLR * gradB;
         
@@ -229,6 +277,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
             clientb_cell{i} = clientb{i};
         end
     else
+        % During dropout rounds: use a compensation to update dropout clients' fc3 layer
         spmd
             clientW = localModel.Learnables.Value{idxW};
             clientb = localModel.Learnables.Value{idxB};
@@ -240,17 +289,39 @@ while Round < CommunicationRounds && ~Monitor.Stop
             clientb_cell{i} = clientb{i};
         end
         
-        [W_fc3, b_fc3, clientW_cell, clientb_cell] = compensateDropoutWeights(alphaOld, clientW_cell, clientb_cell, drop_client_ids, prev_global_W, prev_global_b, prev_alpha, prev_clientW_fc3, prev_clientb_fc3);
+        if ~dropoutCompensationDone
+            [W_fc3, b_fc3, clientW_cell, clientb_cell] = compensateDropoutWeights(...
+                alpha, clientW_cell, clientb_cell, drop_client_ids, ...
+                prev_global_W, prev_global_b, prev_alpha, prev_clientW_fc3, prev_clientb_fc3, ...
+                AlphaHistory, clientW_history, clientb_history, Round);
+            dropout_clientW_comp = clientW_cell;
+            dropout_clientb_comp = clientb_cell;
+            dropoutCompensationDone = true;
+        else
+            for i = 1:numClients
+                if ismember(i, drop_client_ids)
+                    clientW_cell{i} = dropout_clientW_comp{i};
+                    clientb_cell{i} = dropout_clientb_comp{i};
+                end
+            end
+            new_global_W = zeros(size(prev_global_W));
+            new_global_b = zeros(size(prev_global_b));
+            for i = 1:numClients
+                new_global_W = new_global_W + alpha(i) * clientW_cell{i};
+                new_global_b = new_global_b + alpha(i) * clientb_cell{i};
+            end
+            W_fc3 = new_global_W;
+            b_fc3 = new_global_b;
+        end
     end
     
-    %% Update the fc3 layer parameters in the global model and use FedAvg aggregation for the other layers
+    %% Global Aggregation (FedAvg): Update other layers (excluding fc3)
     spmd
         locLearnable = localModel.Learnables;
     end
-
-    % For the dropout client, its sample number is treated as 0 and does not participate in FedAvg weighting
     locTrainSizeCell = cell(1, numClients);
     for k = 1:numClients
+        % Exclude dropout clients from FedAvg aggregation
         if ismember(k, drop_client_ids)
             locTrainSizeCell{k} = 0;
         else
@@ -259,8 +330,8 @@ while Round < CommunicationRounds && ~Monitor.Stop
     end
     locFactor = [locTrainSizeCell{:}] / sum([locTrainSizeCell{:}]);
     globalLearnable = FederatedAveragingforSimplexLearning(locFactor, locLearnable);
-
-    % Update global fc3 layer weights and bias
+    
+    % Replace fc3 layer parameters in the global model with the updated ones
     globalLearnable.Value{idxW} = W_fc3;
     globalLearnable.Value{idxB} = b_fc3;
     globalModel.Learnables = globalLearnable;
@@ -276,39 +347,15 @@ while Round < CommunicationRounds && ~Monitor.Stop
     updateInfo(Monitor, CommunicationRound = Round + " of " + CommunicationRounds);
     Monitor.Progress = 100 * Round / CommunicationRounds;
     
-    %% Update the last round of parameters used for dropout reconstruction
+    %% Update previous round parameters for dropout compensation
     prev_global_W = W_fc3;
     prev_global_b = b_fc3;
-    prev_alpha = alphaOld;
+    prev_alpha = alpha;
     prev_clientW_fc3 = clientW_cell;
     prev_clientb_fc3 = clientb_cell;
     
-    %% Update alpha
-    if Round < simplex_start_epoch
-        alpha = alphaOld; 
-    elseif Round == simplex_start_epoch
-        newAlpha = computeAlphaFromGradients(gradAll, numClients);
-        currentAlpha = newAlpha;
-        alpha = currentAlpha;
-    elseif mod(Round - simplex_start_epoch, 5) == 0
-        newAlpha = computeAlphaFromGradients(gradAll, numClients);
-        blending_factor = 0.5;
-        currentAlpha = blending_factor * newAlpha + (1 - blending_factor) * currentAlpha;
-        currentAlpha = currentAlpha / sum(currentAlpha);
-        alpha = currentAlpha;
-    else
-        noise_scale = 0.001;
-        noisy_alpha = currentAlpha + noise_scale * randn(size(currentAlpha));
-        noisy_alpha(noisy_alpha < 0) = 0;
-        if sum(noisy_alpha) == 0
-            currentAlpha = ones(1, numClients) / numClients;
-        else
-            currentAlpha = noisy_alpha / sum(noisy_alpha);
-        end
-        alpha = currentAlpha;
-    end
-    AlphaHistory(Round, :) = alpha;
-    alphaOld = alpha;
+    clientW_history{Round} = clientW_cell;
+    clientb_history{Round} = clientb_cell;
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
@@ -330,12 +377,16 @@ save(filenameAccuracy, 'GlobalAccuracyRecord');
 filenameClass = fullfile('Simplex_result', sprintf('GlobalClassTestAccuracyRecordforSimplex%s.mat', char(dropClientStr)));
 save(filenameClass, 'GlobalRecording');
 
+filenameAlpha = fullfile('Simplex_result', sprintf('AlphaHistory%s.mat', char(dropClientStr)));
+save(filenameAlpha, 'AlphaHistory');
+
 figAlpha = figure('Visible','off');
 for i = 1:participants
     subplot(3,2,i);
     plot(1:CommunicationRounds, AlphaHistory(:, i), '-');
     xlabel('Communication Round');
     ylabel('Alpha Value');
+    ylim([0 1]);
     title(sprintf('Client %d', i));
     grid on;
 end
