@@ -1,1 +1,9 @@
-DASHlink_full_fourclass_raw_comp.npz
+.vscode
+.vs
+data_instance_output
+Dataset_nonIID
+datasetsByArrivalAirport
+Matlab/Dataset_IID
+Matlab/Simplex_result
+*.out
+.DS_Store
