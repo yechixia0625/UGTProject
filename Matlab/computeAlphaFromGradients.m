@@ -1,21 +1,28 @@
 function newAlpha = computeAlphaFromGradients(gradAll, numClients)
-    % Collect all client gradients
-    allGradients = [];
+    persistent pcaCoeff;
+    if isempty(pcaCoeff)
+        % Collect all client gradient data
+        allGradients = [];
+        for i = 1:numClients
+            grad_i = extractdata(gradAll{i});
+            allGradients = [allGradients, grad_i];
+        end
+        [pcaCoeff, ~, ~] = pca(allGradients');
+    end
+    
+    simplexDim = numClients - 1;
+    reducedGradients = zeros(simplexDim, numClients);
     for i = 1:numClients
         grad_i = extractdata(gradAll{i});
-        allGradients = [allGradients, grad_i];
+        % The projection is performed using the first calculated PCA coefficients
+        reducedGradients(:,i) = pcaCoeff(:,1:simplexDim)' * grad_i;
     end
-    % Performing PCA
-    [coeff, ~, ~] = pca(allGradients);
-    simplexDim = numClients - 1;
-    reducedGradients = coeff(:,1:simplexDim)';
     
-    % Regularization
     s = 0.5;
     lambda = 0.01;
     regularizedGradients = reisz_energy_regularization(reducedGradients, s, lambda);
     
-    % Project onto simplex
+    % Project each client gradient onto the simplex
     simplexPoints = zeros(numClients, simplexDim);
     for k = 1:numClients
         simplexPoints(k,:) = project_to_simplex(regularizedGradients(:,k));
