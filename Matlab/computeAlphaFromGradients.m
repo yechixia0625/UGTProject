@@ -1,5 +1,10 @@
-function newAlpha = computeAlphaFromGradients(gradAll, numClients)
+function newAlpha = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds)
     persistent pcaCoeff;
+    global allSimplexPoints;
+    if isempty(allSimplexPoints)
+        allSimplexPoints = cell(1, CommunicationRounds);
+    end
+
     if isempty(pcaCoeff)
         % Collect all client gradient data
         allGradients = [];
@@ -28,6 +33,8 @@ function newAlpha = computeAlphaFromGradients(gradAll, numClients)
         simplexPoints(k,:) = project_to_simplex(regularizedGradients(:,k));
     end
     
+    allSimplexPoints{Round} = simplexPoints;
+
     % Calculate the similarity matrix and sampling weights
     similarityMatrix = pdist(simplexPoints);
     similarityMatrix = squareform(similarityMatrix);

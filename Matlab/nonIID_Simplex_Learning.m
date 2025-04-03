@@ -119,19 +119,20 @@ idxW = find(strcmp(globalModel.Learnables.Layer, 'fc3') & strcmp(globalModel.Lea
 idxB = find(strcmp(globalModel.Learnables.Layer, 'fc3') & strcmp(globalModel.Learnables.Parameter, 'Bias'));
 W_fc3 = globalModel.Learnables.Value{idxW};
 b_fc3 = globalModel.Learnables.Value{idxB};
-globalSimplexLR = 0.001;
+globalSimplexLR = 0.0001;
 
 %% Define Global Constants
 CommunicationRounds = 50; 
 simplex_start_epoch = 11;
 dropout_round = 20;
 LocalEpochs = 10;
-LearningRate = 0.001;
+LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
 Temperature = 0.5;
 Mu = 1.0;
-
+RoundTime = zeros(1, CommunicationRounds);  % 用于记录每轮消耗的时间
+global allSimplexPoints;
 % The server publishes the global model to each client
 localModel = globalModel;
 
@@ -177,7 +178,7 @@ end
 %% Federated Learning
 while Round < CommunicationRounds && ~Monitor.Stop
     Round = Round + 1;
-    
+    tic;
     %% Local Training Update (per client)
     spmd
         if (Round >= dropout_round) && ismember(spmdIndex, drop_client_ids)
@@ -219,7 +220,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
     if Round < simplex_start_epoch
         alpha = alphaOld; 
     else
-        newAlpha_grad = computeAlphaFromGradients(gradAll, numClients);
+        newAlpha_grad = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds);
         if Round < dropout_round
             % Before dropout round: use the simplex learning result directly
             currentAlpha = newAlpha_grad;
@@ -353,7 +354,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
     prev_alpha = alpha;
     prev_clientW_fc3 = clientW_cell;
     prev_clientb_fc3 = clientb_cell;
-    
+    RoundTime(Round) = toc;  % 结束计时，并把本轮的耗时记录到 RoundTime 中
     clientW_history{Round} = clientW_cell;
     clientb_history{Round} = clientb_cell;
 end
@@ -380,11 +381,17 @@ save(filenameClass, 'GlobalRecording');
 filenameAlpha = fullfile('Simplex_result', sprintf('AlphaHistory%s.mat', char(dropClientStr)));
 save(filenameAlpha, 'AlphaHistory');
 
+filenameAllSimplexPoints = fullfile('Simplex_result', sprintf('AllSimplexPoints.mat'));
+save(filenameAllSimplexPoints, 'allSimplexPoints');
+
+filenameTime = fullfile('Simplex_result', sprintf('RoundTime%s.mat', char(dropClientStr)));
+save(filenameTime, 'RoundTime');
+
 figAlpha = figure('Visible','off');
 for i = 1:participants
     subplot(3,2,i);
     plot(1:CommunicationRounds, AlphaHistory(:, i), '-');
-    xlabel('Communication Round');
+    xlabel('Epoch');
     ylabel('Alpha Value');
     ylim([0 1]);
     title(sprintf('Client %d', i));
@@ -422,3 +429,13 @@ linkaxes(ax3, 'y');
 filename3 = fullfile('Simplex_result', sprintf('PerClassTestAccuracy%s.png', char(dropClientStr)));
 saveas(fig3, filename3);
 close(fig3);
+
+figTime = figure('Visible','off');
+plot(1:CommunicationRounds, RoundTime, '-', 'LineWidth', 1.5);
+xlabel('Epoch');
+ylabel('Time (seconds)');
+title('Time Consumption Each Round');
+grid on;
+filenameTimeFig = fullfile('Simplex_result', sprintf('RoundTime%s.png', char(dropClientStr)));
+saveas(figTime, filenameTimeFig);
+close(figTime);
