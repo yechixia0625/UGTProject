@@ -131,7 +131,7 @@ Momentum = 0.5;
 Velocity = []; 
 Temperature = 0.5;
 Mu = 1.0;
-RoundTime = zeros(1, CommunicationRounds);  % 用于记录每轮消耗的时间
+RoundTime = zeros(1, CommunicationRounds);
 global allSimplexPoints;
 % The server publishes the global model to each client
 localModel = globalModel;
@@ -220,25 +220,8 @@ while Round < CommunicationRounds && ~Monitor.Stop
     if Round < simplex_start_epoch
         alpha = alphaOld; 
     else
-        newAlpha_grad = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds);
-        if Round < dropout_round
-            % Before dropout round: use the simplex learning result directly
-            currentAlpha = newAlpha_grad;
-        else
-            % During dropout rounds: for dropout clients, mix the predicted value with newAlpha_grad
-            currentAlpha = newAlpha_grad;
-            for i = 1:numClients
-                if ismember(i, drop_client_ids)
-                    xdata = (1:(Round-1))';
-                    ydata = AlphaHistory(1:(Round-1), i);
-                    f = fit(xdata, ydata, 'poly1');
-                    predicted_value = f(Round);
-                    blending_factor = 0.3;
-                    currentAlpha(i) = blending_factor * predicted_value + (1 - blending_factor) * newAlpha_grad(i);
-                end
-            end
-        end
-        currentAlpha = currentAlpha / sum(currentAlpha);
+        newAlpha_grad = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds, simplex_start_epoch);
+        currentAlpha = newAlpha_grad / sum(newAlpha_grad);
         alpha = currentAlpha;
     end
     AlphaHistory(Round, :) = alpha;
@@ -354,7 +337,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
     prev_alpha = alpha;
     prev_clientW_fc3 = clientW_cell;
     prev_clientb_fc3 = clientb_cell;
-    RoundTime(Round) = toc;  % 结束计时，并把本轮的耗时记录到 RoundTime 中
+    RoundTime(Round) = toc;
     clientW_history{Round} = clientW_cell;
     clientb_history{Round} = clientb_cell;
 end
@@ -381,7 +364,7 @@ save(filenameClass, 'GlobalRecording');
 filenameAlpha = fullfile('Simplex_result', sprintf('AlphaHistory%s.mat', char(dropClientStr)));
 save(filenameAlpha, 'AlphaHistory');
 
-filenameAllSimplexPoints = fullfile('Simplex_result', sprintf('AllSimplexPoints.mat'));
+filenameAllSimplexPoints = fullfile('Simplex_result', sprintf('AllSimplexPoints%s.mat', char(dropClientStr)));
 save(filenameAllSimplexPoints, 'allSimplexPoints');
 
 filenameTime = fullfile('Simplex_result', sprintf('RoundTime%s.mat', char(dropClientStr)));

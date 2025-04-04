@@ -1,4 +1,4 @@
-function newAlpha = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds)
+function newAlpha = computeAlphaFromGradients(gradAll, numClients, Round, CommunicationRounds, simplex_start_epoch)
     persistent pcaCoeff;
     global allSimplexPoints;
     if isempty(allSimplexPoints)
@@ -32,7 +32,15 @@ function newAlpha = computeAlphaFromGradients(gradAll, numClients, Round, Commun
     for k = 1:numClients
         simplexPoints(k,:) = project_to_simplex(regularizedGradients(:,k));
     end
-    
+
+    if Round > simplex_start_epoch
+        previousSimplexPoints = allSimplexPoints{Round - 1};
+        blendingFactor = 0.7;
+        for i = 1:numClients
+            simplexPoints(i,:) = blendingFactor * previousSimplexPoints(i,:) + (1 - blendingFactor) * simplexPoints(i,:);
+        end
+    end
+
     allSimplexPoints{Round} = simplexPoints;
 
     % Calculate the similarity matrix and sampling weights
