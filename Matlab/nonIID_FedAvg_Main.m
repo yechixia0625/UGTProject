@@ -81,11 +81,6 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
-    % add new conv
-    convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    reluLayer('Name', 'relu3')
-    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
-
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
     reluLayer('Name', 'relu4')
@@ -100,9 +95,9 @@ layers = [
   
 globalModel = dlnetwork(layers);
 %% Define Global Constants
-CommunicationRounds = 100; 
+CommunicationRounds = 50; 
 LocalEpochs = 10; 
-LearningRate = 0.001;
+LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
 
@@ -151,6 +146,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
     globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
     %% Global Model Evaluation 
     [GlobalTestAccuracy, GlobalTestLabel, GlobalTestPred, GlobalClassAccuracy] = EvaluateModelForSixClients(globalModel, gloTsetMBQ, classes);
+    fprintf('Round %d: Global Test Accuracy: %.4f\n', Round, GlobalTestAccuracy);
     % Record GlobalTestAccuracy
     GlobalAccuracyRecord(Round) = GlobalTestAccuracy;
     % record the accuracy of each class for global test
@@ -163,5 +159,38 @@ while Round < CommunicationRounds && ~Monitor.Stop
     Monitor.Progress = 100 * Round / CommunicationRounds;
 end
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-save('GlobalTestAccuracyRecordforFednonIID.mat', 'GlobalAccuracyRecord');
-save('GlobalClassTestAccuracyRecordforFednonIID.mat', 'GlobalRecording');
+
+%% Save the result and the ploting
+if ~exist('FedAvg_result', 'dir')
+    mkdir('FedAvg_result');
+end
+
+save('FedAvg_result/GlobalTestAccuracyRecordforFedAvgnonIID.mat', 'GlobalAccuracyRecord');
+save('FedAvg_result/GlobalClassTestAccuracyRecordforFedAvgnonIID.mat', 'GlobalRecording');
+
+load('FedAvg_result/GlobalTestAccuracyRecordforFedAvgnonIID.mat', 'GlobalAccuracyRecord');
+load('FedAvg_result/GlobalClassTestAccuracyRecordforFedAvgnonIID.mat', 'GlobalRecording');
+
+figure;
+plot(GlobalAccuracyRecord, '-o','LineWidth', 2);
+xlabel('Communication Rounds');
+ylabel('Global Test Accuracy');
+title('Global Test Accuracy over Communication Rounds');
+grid on;
+saveas(gcf, 'FedAvg_result/GlobalTestAccuracy.png');
+
+figure;
+numClasses = size(GlobalRecording,2);
+rounds = 1:size(GlobalRecording,1);
+hold on;
+colors = lines(numClasses);
+for c = 1:numClasses
+    plot(rounds, GlobalRecording(:,c), '-o','LineWidth', 2, 'Color', colors(c,:));
+end
+xlabel('Communication Rounds');
+ylabel('Test Accuracy per Class');
+title('Global Test Accuracy for each Class');
+legend(arrayfun(@(c) sprintf('Class %d', c), 1:numClasses, 'UniformOutput', false));
+grid on;
+hold off;
+saveas(gcf, 'FedAvg_result/GlobalClassTestAccuracy.png');

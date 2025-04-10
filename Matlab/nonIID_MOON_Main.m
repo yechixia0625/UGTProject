@@ -82,14 +82,13 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
-    % add new conv
-    convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    reluLayer('Name', 'relu3')
-    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
-
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
     reluLayer('Name', 'relu4')
+
+    % block fc_embed
+    fullyConnectedLayer(256, 'Name', 'fc_embed');
+    reluLayer('Name', 'relu_embed');
 
     % block 4
     fullyConnectedLayer(64, 'Name', 'fc2')
@@ -101,16 +100,15 @@ layers = [
   
 globalModel = dlnetwork(layers);
 %% Define Global Constants
-CommunicationRounds = 100; 
+CommunicationRounds = 50; 
 LocalEpochs = 10; 
-LearningRate = 0.001;
+LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature = 0.5; % 定义温度参数
-Mu = 1.0; % 定义对比损失的权重
+Temperature = 0.7
+Mu = 1.0;
 
-
-% server published a global model to all participants
+% Server published a global model to all participants
 localModel = globalModel;
 %% Define Monitor
 Monitor = trainingProgressMonitor(...
@@ -119,39 +117,51 @@ Monitor = trainingProgressMonitor(...
     XLabel="Communication Round");
 %% Training Circuit
 Round = 0;
-spmd
-    PreLocRepresent = []; % 初始化PreLocRepresent
-end
 
-%  record the accuracy of each class for global test
+% Record the accuracy of each class for global test
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
 GlobalAccuracyRecord = zeros(1, CommunicationRounds);
 
-% stop conditions
+% Initialize the preLocalModel parameter for each client
+PreLocalModelLearnables = cell(1, participants);
+for i = 1:participants
+    PreLocalModelLearnables{i} = globalModel.Learnables.Value;
+end
+
+% Stop conditions
 while Round < CommunicationRounds && ~Monitor.Stop 
 
     Round = Round + 1;
 
     spmd
-        % update local model
-        localModel.Learnables.Value = globalModel.Learnables.Value; 
-        % local epochs
+        % Get the preLocalModel parameter for the current client
+        preLocalModelParams = PreLocalModelLearnables{spmdIndex};
+        % Loading parameters
+        preLocalModel = localModel;
+        preLocalModel.Learnables.Value = preLocalModelParams; 
+        
+        % Update the local model to the current global model
+        localModel.Learnables.Value = globalModel.Learnables.Value;
+        
+        % Local training
         for epoch = 1:LocalEpochs
-            % data shuffle
-            shuffle(locTrainMBQ); 
-            % mini-batch learning
-            while hasdata(locTrainMBQ) 
-                % X: image, Y: label
-                [X, Y] = next(locTrainMBQ); 
-                % loss and gradient calculation
-                [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
-                % stochastic gradient descent update
+            shuffle(locTrainMBQ);
+            while hasdata(locTrainMBQ)
+                [X, Y] = next(locTrainMBQ);
+                [loss, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, preLocalModel, Temperature, Mu);
+                % Updating model parameters
                 [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
-                PreLocRepresent = CurLocalRepresent;
             end
         end
-        % local model parameter collection
+        
+        % Save the current model parameters for the next round
+        newPreLocalModelParams = localModel.Learnables.Value;
         locLearnable = localModel.Learnables.Value;
+    end
+
+    % Update the preLocalModel parameter for each client
+    for i = 1:participants
+        PreLocalModelLearnables{i} = newPreLocalModelParams{i};
     end
     % federated averaging
     locFactor = [locTrainSize{:}] / sum([locTrainSize{:}]);
@@ -181,11 +191,14 @@ while Round < CommunicationRounds && ~Monitor.Stop
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-save('MOON_result/GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
-save('MOON_result/GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');
 
-load('MOON_result/GlobalTestAccuracyRecordforMOONnonIID.mat', 'GlobalAccuracyRecord');
-load('MOON_result/GlobalClassTestAccuracyRecordforMOONnonIID.mat', 'GlobalRecording');
+outputDir = 'MOON_result';
+if ~exist(outputDir, 'dir')
+    mkdir(outputDir);
+end
+
+save(fullfile(outputDir, sprintf('GlobalTestAccuracyRecord_T%.2f.mat', Temperature)), 'GlobalAccuracyRecord');
+save(fullfile(outputDir, sprintf('GlobalClassTestAccuracyRecord_T%.2f.mat', Temperature)), 'GlobalRecording');
 
 figure;
 plot(GlobalAccuracyRecord, '-o','LineWidth', 2);
@@ -193,7 +206,7 @@ xlabel('Communication Rounds');
 ylabel('Global Test Accuracy');
 title('Global Test Accuracy over Communication Rounds');
 grid on;
-saveas(gcf, 'MOON_result/GlobalTestAccuracy.png');
+saveas(gcf, fullfile(outputDir, sprintf('GlobalTestAccuracy_T%.2f.png', Temperature)));
 
 figure;
 numClasses = size(GlobalRecording,2);
@@ -209,4 +222,4 @@ title('Global Test Accuracy for each Class');
 legend(arrayfun(@(c) sprintf('Class %d', c), 1:numClasses, 'UniformOutput', false));
 grid on;
 hold off;
-saveas(gcf, 'MOON_result/GlobalClassTestAccuracy.png');
+saveas(gcf, fullfile(outputDir, sprintf('GlobalClassTestAccuracy_T%.2f.png', Temperature)));
