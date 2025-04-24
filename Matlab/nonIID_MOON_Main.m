@@ -1,9 +1,9 @@
 clc;
-clear;
+clearvars -except Temperature;
 close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_nonIID'); 
+DatasetPath = fullfile('Dataset_IID'); 
 %% Define Parallel
 cluster = parcluster("Processes");
 cluster.NumWorkers = 6;
@@ -84,15 +84,11 @@ layers = [
 
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
-    reluLayer('Name', 'relu4')
-
-    % block fc_embed
-    fullyConnectedLayer(256, 'Name', 'fc_embed');
-    reluLayer('Name', 'relu_embed');
+    reluLayer('Name', 'relu3')
 
     % block 4
     fullyConnectedLayer(64, 'Name', 'fc2')
-    reluLayer('Name', 'relu5')
+    reluLayer('Name', 'relu4')
 
     % block 5
     fullyConnectedLayer(NumClasses, 'Name', 'fc3')
@@ -100,12 +96,12 @@ layers = [
   
 globalModel = dlnetwork(layers);
 %% Define Global Constants
-CommunicationRounds = 50; 
+CommunicationRounds = 500; 
 LocalEpochs = 10; 
 LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature = 0.7
+Temperature
 Mu = 1.0;
 
 % Server published a global model to all participants
@@ -149,6 +145,15 @@ while Round < CommunicationRounds && ~Monitor.Stop
             while hasdata(locTrainMBQ)
                 [X, Y] = next(locTrainMBQ);
                 [loss, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, preLocalModel, Temperature, Mu);
+                layerNames = gradient.Layer;
+                for r = 1:height(gradient)
+                    gParam = gradient.Value{r};
+                    currentMedian = median(abs(extractdata(gParam(:))));
+                    if spmdIndex == 1
+                        fprintf('[Client 1][Layer %-15s] Gradient Median = %.4e\n',...
+                            layerNames{r}, currentMedian);
+                    end 
+                end
                 % Updating model parameters
                 [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
             end
@@ -196,6 +201,8 @@ outputDir = 'MOON_result';
 if ~exist(outputDir, 'dir')
     mkdir(outputDir);
 end
+
+save('MOON_result/globalModelWeights.mat', 'globalModel');
 
 save(fullfile(outputDir, sprintf('GlobalTestAccuracyRecord_T%.2f.mat', Temperature)), 'GlobalAccuracyRecord');
 save(fullfile(outputDir, sprintf('GlobalClassTestAccuracyRecord_T%.2f.mat', Temperature)), 'GlobalRecording');

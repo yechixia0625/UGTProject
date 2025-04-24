@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 
 # Load the Excel sheet
-df_airports = pd.read_excel('client/Client_Airport.xlsx')
+df_airports = pd.read_excel('Client_Airport.xlsx')
 
 # Load the .npz file containing all data instances
 data_archive = np.load('DASHlink_full_fourclass_raw_comp.npz')
@@ -23,7 +23,7 @@ for index, row in tqdm(df_airports.iterrows(), total=df_airports.shape[0], desc=
     
     # Read the corresponding CSV file for the airport
     try:
-        airport_csv = pd.read_csv(f'data_instance_output/{airport_name}.csv')
+        airport_csv = pd.read_csv(f'data_instance_iid_output/{airport_name}.csv')
     except FileNotFoundError:
         print(f"Warning: No CSV file found for {airport_name}. Continuing to next airport.")
         continue

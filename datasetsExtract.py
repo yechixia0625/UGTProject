@@ -2,9 +2,9 @@ import os
 import pandas as pd
 
 # 文件路径
-excel_file = 'client/Airport_Label.xlsx'  # 这里替换为你的Excel文件路径
+excel_file = 'Airport_Label.xlsx'  # 这里替换为你的Excel文件路径
 dataset_folder = 'datasetsByArrivalAirport'  # 存放机场数据的文件夹
-output_folder = 'data_instance_output'  # 输出数据的文件夹
+output_folder = 'data_instance_iid_output'  # 输出数据的文件夹
 
 # 创建输出文件夹
 if not os.path.exists(output_folder):

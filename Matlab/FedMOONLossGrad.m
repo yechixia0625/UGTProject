@@ -4,9 +4,9 @@ function [loss, gradient] = FedMOONLossGrad(localModel, globalModel, X, Y, preLo
     SupLoss = crossentropy(YPred, Y);
     
     % Extracting features
-    CurLocalRepresent = predict(localModel, X, 'Outputs', 'fc_embed');
-    CurGloRepresent = predict(globalModel, X, 'Outputs', 'fc_embed');
-    PreLocRepresent = predict(preLocalModel, X, 'Outputs', 'fc_embed');
+    CurLocalRepresent = predict(localModel, X, 'Outputs', 'fc2');
+    CurGloRepresent = predict(globalModel, X, 'Outputs', 'fc2');
+    PreLocRepresent = predict(preLocalModel, X, 'Outputs', 'fc2');
     
     % Calculate the cosine similarity
     norm_local = vecnorm(CurLocalRepresent, 2, 1);
@@ -22,4 +22,7 @@ function [loss, gradient] = FedMOONLossGrad(localModel, globalModel, X, Y, preLo
     % Total loss
     loss = Mu * ConLoss + SupLoss;
     gradient = dlgradient(loss, localModel.Learnables);
+    if ~all(cellfun(@(x) isnumeric(extractdata(x)), gradient.Value))
+        error('Gradient contains non-numeric values.');
+    end
 end
