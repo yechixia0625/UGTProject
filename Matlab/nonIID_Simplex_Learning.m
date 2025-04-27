@@ -95,18 +95,13 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
     
-    % block 3
-    convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    reluLayer('Name', 'relu3')
-    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
-    
     % block 4
     fullyConnectedLayer(128, 'Name', 'fc1')
-    reluLayer('Name', 'relu4')
+    reluLayer('Name', 'relu3')
     
     % block 5
     fullyConnectedLayer(64, 'Name', 'fc2')
-    reluLayer('Name', 'relu5')
+    reluLayer('Name', 'relu4')
     
     % block 6
     fullyConnectedLayer(NumClasses, 'Name', 'fc3')
@@ -129,7 +124,7 @@ LocalEpochs = 10;
 LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature = 0.5;
+Temperature = 0.8;
 Mu = 1.0;
 RoundTime = zeros(1, CommunicationRounds);
 global allSimplexPoints;
@@ -171,8 +166,10 @@ Monitor = trainingProgressMonitor(...
 
 %% Initialize internal variables for spmd
 Round = 0;
-spmd
-    PreLocRepresent = [];
+% Initialize the preLocalModel parameter for each client
+PreLocalModelLearnables = cell(1, participants);
+for i = 1:participants
+    PreLocalModelLearnables{i} = globalModel.Learnables.Value;
 end
 
 %% Federated Learning
@@ -187,17 +184,20 @@ while Round < CommunicationRounds && ~Monitor.Stop
             locLearnable = localModel.Learnables;
         else
             % Non-dropout clients: initialize with the global model and perform local training
+            preLocalModelParams = PreLocalModelLearnables{spmdIndex};
+            preLocalModel = localModel;
+            preLocalModel.Learnables.Value = preLocalModelParams;
             localModel.Learnables.Value = globalModel.Learnables.Value;
             for epoch = 1:LocalEpochs
                 shuffle(locTrainMBQ);
                 while hasdata(locTrainMBQ)
                     [X, Y] = next(locTrainMBQ);
-                    [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
+                    [loss, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, preLocalModel, Temperature, Mu);
                     [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
-                    PreLocRepresent = CurLocalRepresent;
                 end
             end
-            locLearnable = localModel.Learnables;
+            newPreLocalModelParams = localModel.Learnables.Value;
+            locLearnable = localModel.Learnables.Value;
         end
     end
     
@@ -207,7 +207,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
             reset(locTrainMBQ);
         end
         [X_dummy, Y_dummy] = next(locTrainMBQ);
-        [dummyLoss, dummyGradients] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X_dummy, Y_dummy, PreLocRepresent, Temperature, Mu);
+        [dummyLoss, dummyGradients] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X_dummy, Y_dummy, preLocalModel, Temperature, Mu);
         % Extract gradients for fc3 layer weights and biases
         fc3W_grad = dummyGradients.Value{strcmp(dummyGradients.Layer, 'fc3') & strcmp(dummyGradients.Parameter, 'Weights')};
         fc3B_grad = dummyGradients.Value{strcmp(dummyGradients.Layer, 'fc3') & strcmp(dummyGradients.Parameter, 'Bias')};
@@ -312,6 +312,12 @@ while Round < CommunicationRounds && ~Monitor.Stop
             locTrainSizeCell{k} = locTrainSize{k};
         end
     end
+
+    % Update the preLocalModel parameter for each client
+    for i = 1:participants
+        PreLocalModelLearnables{i} = newPreLocalModelParams{i};
+    end
+
     locFactor = [locTrainSizeCell{:}] / sum([locTrainSizeCell{:}]);
     globalLearnable = FederatedAveragingforSimplexLearning(locFactor, locLearnable);
     

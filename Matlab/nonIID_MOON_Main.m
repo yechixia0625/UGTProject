@@ -145,15 +145,6 @@ while Round < CommunicationRounds && ~Monitor.Stop
             while hasdata(locTrainMBQ)
                 [X, Y] = next(locTrainMBQ);
                 [loss, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, preLocalModel, Temperature, Mu);
-                layerNames = gradient.Layer;
-                for r = 1:height(gradient)
-                    gParam = gradient.Value{r};
-                    currentMedian = median(abs(extractdata(gParam(:))));
-                    if spmdIndex == 1
-                        fprintf('[Client 1][Layer %-15s] Gradient Median = %.4e\n',...
-                            layerNames{r}, currentMedian);
-                    end 
-                end
                 % Updating model parameters
                 [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
             end
