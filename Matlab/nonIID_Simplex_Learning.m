@@ -118,8 +118,8 @@ globalSimplexLR = 0.0001;
 
 %% Define Global Constants
 CommunicationRounds = 50; 
-simplex_start_epoch = 11;
-dropout_round = 20;
+simplex_start_epoch = 6;
+dropout_round = 10;
 LocalEpochs = 10;
 LearningRate = 0.0001;
 Momentum = 0.5;
@@ -306,7 +306,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
     locTrainSizeCell = cell(1, numClients);
     for k = 1:numClients
         % Exclude dropout clients from FedAvg aggregation
-        if ismember(k, drop_client_ids)
+        if ismember(k, drop_client_ids) && Round >= dropout_round
             locTrainSizeCell{k} = 0;
         else
             locTrainSizeCell{k} = locTrainSize{k};

@@ -3,7 +3,7 @@ clearvars -except Temperature;
 close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_IID'); 
+DatasetPath = fullfile('Dataset_nonIID'); 
 %% Define Parallel
 cluster = parcluster("Processes");
 cluster.NumWorkers = 6;
@@ -96,7 +96,7 @@ layers = [
   
 globalModel = dlnetwork(layers);
 %% Define Global Constants
-CommunicationRounds = 500; 
+CommunicationRounds = 50; 
 LocalEpochs = 10; 
 LearningRate = 0.0001;
 Momentum = 0.5;

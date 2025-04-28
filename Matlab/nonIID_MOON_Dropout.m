@@ -1,5 +1,5 @@
 clc;
-clear;
+clearvars -except drop_client_ids;
 close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
@@ -82,11 +82,6 @@ layers = [
     reluLayer('Name', 'relu2')
     maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool2')
 
-    % add new conv
-    convolution2dLayer([5 1], 16, 'Name', 'conv3')
-    reluLayer('Name', 'relu3')
-    maxPooling2dLayer([2 1], 'Stride', [2 1], 'Name', 'maxpool3')
-
     % block 3
     fullyConnectedLayer(128, 'Name', 'fc1')
     reluLayer('Name', 'relu4')
@@ -101,16 +96,14 @@ layers = [
   
 globalModel = dlnetwork(layers);
 %% Define Global Constants
-CommunicationRounds = 100; 
+CommunicationRounds = 50; 
 LocalEpochs = 10; 
-LearningRate = 0.001;
+LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature = 0.5;
+Temperature = 0.8;
 Mu = 1.0;
 dropout_round = 10;
-drop_client_ids = [1, 2, 5, 6];
-
 
 % server published a global model to all participants
 localModel = globalModel;
@@ -121,8 +114,11 @@ Monitor = trainingProgressMonitor(...
     XLabel="Communication Round");
 %% Training Circuit
 Round = 0;
-spmd
-    PreLocRepresent = []; 
+
+% Initialize the preLocalModel parameter for each client
+PreLocalModelLearnables = cell(1, participants);
+for i = 1:participants
+    PreLocalModelLearnables{i} = globalModel.Learnables.Value;
 end
 
 %  record the accuracy of each class for global test
@@ -135,23 +131,25 @@ while Round < CommunicationRounds && ~Monitor.Stop
     Round = Round + 1;
 
     spmd
-        % Simulated client drop: If the current round >=dropout_round and the current client is the specified dropped client, local training is skipped
         if (Round >= dropout_round) && ismember(spmdIndex, drop_client_ids)
-            % Client offline, directly synchronize the global model, skip the calculation
+            % For dropout clients after the dropout round, simply sync with the global model
             localModel.Learnables.Value = globalModel.Learnables.Value;
             locLearnable = localModel.Learnables.Value;
         else
-            % Normal local training process
-            localModel.Learnables.Value = globalModel.Learnables.Value; 
+            % Non-dropout clients: initialize with the global model and perform local training
+            preLocalModelParams = PreLocalModelLearnables{spmdIndex};
+            preLocalModel = localModel;
+            preLocalModel.Learnables.Value = preLocalModelParams;
+            localModel.Learnables.Value = globalModel.Learnables.Value;
             for epoch = 1:LocalEpochs
-                shuffle(locTrainMBQ); 
-                while hasdata(locTrainMBQ) 
-                    [X, Y] = next(locTrainMBQ); 
-                    [CurLocalRepresent, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, PreLocRepresent, Temperature, Mu);
+                shuffle(locTrainMBQ);
+                while hasdata(locTrainMBQ)
+                    [X, Y] = next(locTrainMBQ);
+                    [loss, gradient] = dlfeval(@FedMOONLossGrad, localModel, globalModel, X, Y, preLocalModel, Temperature, Mu);
                     [localModel, Velocity] = sgdmupdate(localModel, gradient, Velocity, LearningRate, Momentum);
-                    PreLocRepresent = CurLocalRepresent;
                 end
             end
+            newPreLocalModelParams = localModel.Learnables.Value;
             locLearnable = localModel.Learnables.Value;
         end
     end
@@ -159,11 +157,16 @@ while Round < CommunicationRounds && ~Monitor.Stop
     % Set the sample number of dropped clients to 0 during global aggregation so that it does not affect global updates
     locTrainSizeCell = cell(1, participants);
     for k = 1:participants
-        if ismember(k, drop_client_ids)
+        if ismember(k, drop_client_ids) && Round >= dropout_round
             locTrainSizeCell{k} = 0;
         else
             locTrainSizeCell{k} = locTrainSize{k};
         end
+    end
+    
+    % Update the preLocalModel parameter for each client
+    for i = 1:participants
+        PreLocalModelLearnables{i} = newPreLocalModelParams{i};
     end
     locFactor = [locTrainSizeCell{:}] / sum([locTrainSizeCell{:}]);
     globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
@@ -185,5 +188,47 @@ while Round < CommunicationRounds && ~Monitor.Stop
 end
 
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
-save('GlobalTestAccuracyRecordforDropOut.mat', 'GlobalAccuracyRecord');
-save('GlobalClassTestAccuracyRecordforDropOut.mat', 'GlobalRecording');
+if ~isempty(drop_client_ids)
+    dropClientStr = "_drop_client_ids_" + strjoin(string(drop_client_ids), '_');
+else
+    dropClientStr = "";
+end
+
+%% Save the result and the ploting
+if ~exist('MOON_dropout_result', 'dir')
+    mkdir('MOON_dropout_result');
+end
+
+filenameAccuracy = fullfile('MOON_dropout_result', sprintf('GlobalTestAccuracyRecordforSimplex%s.mat', char(dropClientStr)));
+save(filenameAccuracy, 'GlobalAccuracyRecord');
+
+filenameClass = fullfile('MOON_dropout_result', sprintf('GlobalClassTestAccuracyRecordforSimplex%s.mat', char(dropClientStr)));
+save(filenameClass, 'GlobalRecording');
+
+fig2 = figure('Visible','off');
+epochs_global = 1:CommunicationRounds;
+plot(epochs_global, GlobalAccuracyRecord, '-', 'LineWidth', 1.5);
+xlabel('Epoch');
+ylabel('Global Test Accuracy');
+title('Global Test Accuracy vs Epoch');
+grid on;
+filename2 = fullfile('MOON_dropout_result', sprintf('GlobalTestAccuracy%s.png', char(dropClientStr)));
+saveas(fig2, filename2);
+close(fig2);
+
+fig3 = figure('Visible','off');
+epochs_global = 1:CommunicationRounds;
+for c = 1:NumClasses
+    subplot(3,2,c);
+    plot(epochs_global, GlobalRecording(:, c), '-', 'LineWidth', 1.5);
+    xlabel('Epoch');
+    ylabel('Test Accuracy');
+    title(sprintf('Class %d', c));
+    grid on;
+end
+sgtitle('Per-Class Test Accuracy vs Epoch');
+ax3 = findall(gcf, 'Type', 'axes');
+linkaxes(ax3, 'y');
+filename3 = fullfile('MOON_dropout_result', sprintf('PerClassTestAccuracy%s.png', char(dropClientStr)));
+saveas(fig3, filename3);
+close(fig3);
