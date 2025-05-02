@@ -4,7 +4,7 @@
 #SBATCH --mem=16G
 #SBATCH --job-name=nonIID_MOON_Main
 #SBATCH --mail-user=cye9@sheffield.ac.uk
-#SBATCH --array=1-6
+#SBATCH --array=6
 
 module load MATLAB/2023b
 

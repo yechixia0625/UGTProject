@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-base_dir = 'Dataset_IID'  # 基础目录，包含客户端文件夹
+base_dir = 'Dataset_nonIID_simplex'  # 基础目录，包含客户端文件夹
 clients = ['local_1', 'local_2', 'local_3', 'local_4', 'local_5', 'local_6']
 labels = [0, 1, 2, 3]
 

@@ -13,4 +13,4 @@ def delete_csv_files(folder_path):
 
 # 使用示例：将 'your_folder_path' 替换为要删除 .csv 文件的文件夹路径
 # delete_csv_files('data_instance_output')
-delete_csv_files('Dataset_IID')
+delete_csv_files('Dataset_nonIID_simplex')

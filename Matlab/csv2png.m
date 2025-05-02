@@ -1,5 +1,5 @@
 % 指定顶级文件夹路径
-folderPath = '/users/coa22cy/UGTProject/Dataset_IID';
+folderPath = '/users/coa22cy/UGTProject/Dataset_nonIID_simplex';
 
 % 调用函数处理顶级文件夹
 processFolder(folderPath);

@@ -11,7 +11,7 @@ data_archive = np.load('DASHlink_full_fourclass_raw_comp.npz')
 data_instances = data_archive['data']
 
 # Define the base directory for storing the datasets
-base_dir = 'Dataset_IID'
+base_dir = 'Dataset_nonIID_simplex'
 
 # Initialize a dictionary to store the count of successful CSV saves
 successful_counts = {airport: [0, 0, 0, 0] for airport in df_airports['Airport']}
@@ -23,7 +23,7 @@ for index, row in tqdm(df_airports.iterrows(), total=df_airports.shape[0], desc=
     
     # Read the corresponding CSV file for the airport
     try:
-        airport_csv = pd.read_csv(f'data_instance_iid_output/{airport_name}.csv')
+        airport_csv = pd.read_csv(f'data_instance_noniid_simplex/{airport_name}.csv')
     except FileNotFoundError:
         print(f"Warning: No CSV file found for {airport_name}. Continuing to next airport.")
         continue

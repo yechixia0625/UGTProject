@@ -5,7 +5,7 @@ close all;
 delete(gcp("nocreate"));
 
 %% Define the data set path
-DatasetPath = fullfile('Dataset_nonIID'); 
+DatasetPath = fullfile('Dataset_nonIID_simplex'); 
 
 %% Set up parallel computing
 cluster = parcluster("Processes");
@@ -114,12 +114,12 @@ idxW = find(strcmp(globalModel.Learnables.Layer, 'fc3') & strcmp(globalModel.Lea
 idxB = find(strcmp(globalModel.Learnables.Layer, 'fc3') & strcmp(globalModel.Learnables.Parameter, 'Bias'));
 W_fc3 = globalModel.Learnables.Value{idxW};
 b_fc3 = globalModel.Learnables.Value{idxB};
-globalSimplexLR = 0.0001;
+globalSimplexLR = 0.01;
 
 %% Define Global Constants
 CommunicationRounds = 50; 
-simplex_start_epoch = 6;
-dropout_round = 10;
+simplex_start_epoch = 11;
+dropout_round = 20;
 LocalEpochs = 10;
 LearningRate = 0.0001;
 Momentum = 0.5;

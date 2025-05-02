@@ -3,7 +3,7 @@ clearvars -except drop_client_ids;
 close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_nonIID'); 
+DatasetPath = fullfile('Dataset_nonIID_simplex'); 
 %% Define Parallel
 cluster = parcluster("Processes");
 cluster.NumWorkers = 6;
@@ -103,7 +103,7 @@ Momentum = 0.5;
 Velocity = []; 
 Temperature = 0.8;
 Mu = 1.0;
-dropout_round = 10;
+dropout_round = 20;
 
 % server published a global model to all participants
 localModel = globalModel;
