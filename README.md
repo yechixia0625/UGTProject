@@ -1,5 +1,8 @@
 # Enhancing Anomaly Detection in Aircraft Data Using Privacy-Preserving Federated Learning Models
 
+## Supervisor
+- **Professor Visakan Kadirkamanathan**
+
 ## Author
 - **Chixia Ye** - *The University of Sheffield*
 
