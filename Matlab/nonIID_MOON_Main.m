@@ -1,5 +1,5 @@
 clc;
-clearvars -except Temperature;
+clearvars;
 close all;
 delete(gcp("nocreate"));
 %% Define Dataset Path
@@ -101,7 +101,7 @@ LocalEpochs = 10;
 LearningRate = 0.0001;
 Momentum = 0.5;
 Velocity = []; 
-Temperature
+Temperature = 0.8;
 Mu = 1.0;
 
 % Server published a global model to all participants

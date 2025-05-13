@@ -1,0 +1,5 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+12939,658200210052105,KMSP,30R,KCMX,31,0
+12955,658200210101125,KMSP,12L,KCMX,31,0
+24982,663200208241110,KMSP,30R,KCMX,31,0
+38429,668200208210702,KMSP,12R,KCMX,31,0

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=6
+#SBATCH --cpus-per-task=6
 #SBATCH --mem=16G
 #SBATCH --job-name=nonIID_MOON_Main
 #SBATCH --mail-user=cye9@sheffield.ac.uk

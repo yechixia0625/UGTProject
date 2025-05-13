@@ -1,0 +1,4 @@
+data_instance,flight_record,departure_airport,departure_runway,arrival_airport,arrival_runway,label
+26054,664200105051653,KDTW,22L,KBMI,29,0
+48358,671200406160633,KDTW,21L,KBMI,29,0
+72737,681200401031404,KMSP,17,KBMI,20,0

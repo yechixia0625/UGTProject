@@ -2,8 +2,11 @@
 .vs
 data_instance_output
 Dataset_nonIID
-datasetsByArrivalAirport
+DASHlink_full_fourclass_raw_comp.npz
 Matlab/Dataset_IID
 Matlab/Dataset_nonIID
+Matlab/Dataset_nonIID_simplex
+Matlab/*.slurm
 *.out
 .DS_Store
+Matlab/__pycache__

@@ -2,7 +2,7 @@ clc;
 clear;
 delete(gcp("nocreate"));
 %% Define Dataset Path
-DatasetPath = fullfile('Dataset_IID'); 
+DatasetPath = fullfile('Dataset_nonIID'); 
 disp('IID');
 %% Define Parallel
 cluster = parcluster("Processes");
@@ -117,8 +117,6 @@ PreLocRepresent = [];
 GlobalRecording = zeros(CommunicationRounds, NumClasses);
 GlobalAccuracyRecord = zeros(1, CommunicationRounds);
 
-ClientAccuracyRecord = zeros(CommunicationRounds, participants);
-
 % stop conditions
 while Round < CommunicationRounds && ~Monitor.Stop 
 
@@ -143,19 +141,7 @@ while Round < CommunicationRounds && ~Monitor.Stop
         end
         % local model parameter collection
         locLearnable = localModel.Learnables.Value;
-        augLocTest = augmentedImageDatastore(inputSize(1:2), locTest);
-        locTestMBQ = minibatchqueue(augLocTest, ...
-            MiniBatchSize = MiniBatchSize, ...
-            MiniBatchFcn = preprocess, ...
-            MiniBatchFormat = ["SSCB",""]);
-        [localAcc, ~, ~, ~] = EvaluateModelForSixClients(localModel, locTestMBQ, classes);
-        clientAcc = localAcc;
     end
-
-    for i = 1:participants
-        ClientAccuracyRecord(Round, i) = clientAcc{i};
-    end
-
     % federated averaging
     locFactor = [locTrainSize{:}] / sum([locTrainSize{:}]);
     globalModel.Learnables.Value = FederatedAveraging(locFactor, locLearnable);
@@ -176,13 +162,12 @@ end
 FinalRoundEachClassAccuracy = GlobalRecording(Round, :);
 
 %% Save the result and the ploting
-if ~exist('FedAvg_result_IID', 'dir')
-    mkdir('FedAvg_result_IID');
+if ~exist('FedAvg_result_nonIID', 'dir')
+    mkdir('FedAvg_result_nonIID');
 end
 
-save('FedAvg_result_IID/GlobalTestAccuracyRecordforFedAvg.mat', 'GlobalAccuracyRecord');
-save('FedAvg_result_IID/GlobalClassTestAccuracyRecordforFedAvg.mat', 'GlobalRecording');
-save('FedAvg_result_IID/ClientTestAccuracyRecordforFedAvg.mat', 'ClientAccuracyRecord');
+save('FedAvg_result_nonIID/GlobalTestAccuracyRecordforFedAvg.mat', 'GlobalAccuracyRecord');
+save('FedAvg_result_nonIID/GlobalClassTestAccuracyRecordforFedAvg.mat', 'GlobalRecording');
 
 figure;
 plot(GlobalAccuracyRecord, '-o','LineWidth', 2);
@@ -190,7 +175,7 @@ xlabel('Communication Rounds');
 ylabel('Global Test Accuracy');
 title('Global Test Accuracy over Communication Rounds');
 grid on;
-saveas(gcf, 'FedAvg_result_IID/GlobalTestAccuracy.png');
+saveas(gcf, 'FedAvg_result_nonIID/GlobalTestAccuracy.png');
 
 figure;
 numClasses = size(GlobalRecording,2);
@@ -206,16 +191,4 @@ title('Global Test Accuracy for each Class');
 legend(arrayfun(@(c) sprintf('Class %d', c), 1:numClasses, 'UniformOutput', false));
 grid on;
 hold off;
-saveas(gcf, 'FedAvg_result_IID/GlobalClassTestAccuracy.png');
-
-figure;
-hold on;
-for i = 1:participants
-    plot(1:CommunicationRounds, ClientAccuracyRecord(:,i), 'LineWidth', 2);
-end
-xlabel('Communication Rounds');
-ylabel('Test Accuracy');
-title('Client Test Accuracy over Communication Rounds');
-legend(arrayfun(@(i) sprintf('Client %d', i), 1:participants, 'UniformOutput', false));
-grid on;
-saveas(gcf, 'FedAvg_result_IID/ClientTestAccuracies.png');
+saveas(gcf, 'FedAvg_result_nonIID/GlobalClassTestAccuracy.png');
