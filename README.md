@@ -47,7 +47,7 @@ gantt
     Submit Project Progress Form 1     :crit,    ppf1, 2024-11-18, 1d
     Submit Interim Report              :crit,    ir, 2024-12-09, 1d
     Interview with Second Reader       :crit,    isr, 2025-01-13, 1d
-    Submit Project Progress Form 2     :crit,    ppf2, 2025-05-12, 1d
-    Submit Dissertation                :crit,    dis, 2025-06-16, 1d
-    Oral Presentation                  :crit,    op, 2025-06-18, 1d
+    Submit Project Progress Form 2     :crit,    ppf2, 2025-04-7, 1d
+    Submit Dissertation                :crit,    dis, 2025-05-12, 1d
+    Oral Presentation                  :crit,    op, 2025-05-21, 1d
 
