@@ -1,5 +1,8 @@
 # Enhancing Anomaly Detection in Aircraft Data Using Privacy-Preserving Federated Learning Models
 
+> [!IMPORTANT]
+> **Notice: This project is protected by Rolls-Royce Intellectual Property.** > Unauthorized access or distribution is strictly prohibited.
+
 ## Supervisor
 - **Professor Visakan Kadirkamanathan**
 
